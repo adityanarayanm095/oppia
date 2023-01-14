@@ -79,7 +79,8 @@ export class AlgebraicExpressionInputInteractionComponent
       let answerIsValid = (
         this.mathInteractionsService.validateAlgebraicExpression(
           this.value, this.guppyInitializationService.getAllowedVariables()));
-      this.warningText = this.mathInteractionsService.getWarningText();
+      // this.warningText = this.mathInteractionsService.getWarningText();
+      this.warningText = "this is a test"
       return answerIsValid;
     }
     this.warningText = '';
