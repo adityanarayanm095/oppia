@@ -23,18 +23,23 @@ import os
 import subprocess
 import sys
 
-from core import python_utils
-from core.constants import constants
-from scripts import build
-from scripts import common
-from scripts import servers
+from typing import Final, List, Optional
 
-LIGHTHOUSE_MODE_PERFORMANCE = 'performance'
-LIGHTHOUSE_MODE_ACCESSIBILITY = 'accessibility'
-SERVER_MODE_PROD = 'dev'
-SERVER_MODE_DEV = 'prod'
-GOOGLE_APP_ENGINE_PORT = 8181
-LIGHTHOUSE_CONFIG_FILENAMES = {
+# TODO(#15567): This can be removed after Literal in utils.py is loaded
+# from typing instead of typing_extensions, this will be possible after
+# we migrate to Python 3.8.
+from scripts import common  # isort:skip pylint: disable=wrong-import-position
+
+from core.constants import constants  # isort:skip
+from scripts import build  # isort:skip
+from scripts import servers  # isort:skip
+
+LIGHTHOUSE_MODE_PERFORMANCE: Final = 'performance'
+LIGHTHOUSE_MODE_ACCESSIBILITY: Final = 'accessibility'
+SERVER_MODE_PROD: Final = 'dev'
+SERVER_MODE_DEV: Final = 'prod'
+GOOGLE_APP_ENGINE_PORT: Final = 8181
+LIGHTHOUSE_CONFIG_FILENAMES: Final = {
     LIGHTHOUSE_MODE_PERFORMANCE: {
         '1': '.lighthouserc-1.js',
         '2': '.lighthouserc-2.js'
@@ -44,12 +49,12 @@ LIGHTHOUSE_CONFIG_FILENAMES = {
         '2': '.lighthouserc-accessibility-2.js'
     }
 }
-APP_YAML_FILENAMES = {
+APP_YAML_FILENAMES: Final = {
     SERVER_MODE_PROD: 'app.yaml',
     SERVER_MODE_DEV: 'app_dev.yaml'
 }
 
-_PARSER = argparse.ArgumentParser(
+_PARSER: Final = argparse.ArgumentParser(
     description="""
 Run the script from the oppia root folder:
     python -m scripts.run_lighthouse_tests
@@ -65,7 +70,7 @@ _PARSER.add_argument(
     required=True, choices=['1', '2'])
 
 
-def run_lighthouse_puppeteer_script():
+def run_lighthouse_puppeteer_script() -> None:
     """Runs puppeteer script to collect dynamic urls."""
     puppeteer_path = (
         os.path.join('core', 'tests', 'puppeteer', 'lighthouse_setup.js'))
@@ -75,28 +80,27 @@ def run_lighthouse_puppeteer_script():
         bash_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = process.communicate()
     if process.returncode == 0:
-        python_utils.PRINT(stdout)
+        print(stdout)
         for line in stdout.split(b'\n'):
             # Standard output is in bytes, we need to decode the line to
             # print it.
             export_url(line.decode('utf-8'))
-        python_utils.PRINT('Puppeteer script completed successfully.')
+        print('Puppeteer script completed successfully.')
     else:
-        python_utils.PRINT('Return code: %s' % process.returncode)
-        python_utils.PRINT('OUTPUT:')
+        print('Return code: %s' % process.returncode)
+        print('OUTPUT:')
         # Standard output is in bytes, we need to decode the line to
         # print it.
-        python_utils.PRINT(stdout.decode('utf-8'))
-        python_utils.PRINT('ERROR:')
+        print(stdout.decode('utf-8'))
+        print('ERROR:')
         # Error output is in bytes, we need to decode the line to
         # print it.
-        python_utils.PRINT(stderr.decode('utf-8'))
-        python_utils.PRINT(
-            'Puppeteer script failed. More details can be found above.')
+        print(stderr.decode('utf-8'))
+        print('Puppeteer script failed. More details can be found above.')
         sys.exit(1)
 
 
-def run_webpack_compilation():
+def run_webpack_compilation() -> None:
     """Runs webpack compilation."""
     max_tries = 5
     webpack_bundles_dir_name = 'webpack_bundles'
@@ -105,16 +109,16 @@ def run_webpack_compilation():
             with servers.managed_webpack_compiler() as proc:
                 proc.wait()
         except subprocess.CalledProcessError as error:
-            python_utils.PRINT(error.output)
+            print(error.output)
             sys.exit(error.returncode)
         if os.path.isdir(webpack_bundles_dir_name):
             break
     if not os.path.isdir(webpack_bundles_dir_name):
-        python_utils.PRINT('Failed to complete webpack compilation, exiting...')
+        print('Failed to complete webpack compilation, exiting...')
         sys.exit(1)
 
 
-def export_url(line):
+def export_url(line: str) -> None:
     """Exports the entity ID in the given line to an environment variable, if
     the line is a URL.
 
@@ -124,7 +128,7 @@ def export_url(line):
             environment.
     """
     url_parts = line.split('/')
-    python_utils.PRINT('Parsing and exporting entity ID in line: %s' % line)
+    print('Parsing and exporting entity ID in line: %s' % line)
     if 'collection_editor' in line:
         os.environ['collection_id'] = url_parts[5]
     elif 'create' in line:
@@ -137,7 +141,7 @@ def export_url(line):
         os.environ['skill_id'] = url_parts[4]
 
 
-def run_lighthouse_checks(lighthouse_mode, shard):
+def run_lighthouse_checks(lighthouse_mode: str, shard: str) -> None:
     """Runs the Lighthouse checks through the Lighthouse config.
 
     Args:
@@ -158,42 +162,41 @@ def run_lighthouse_checks(lighthouse_mode, shard):
         bash_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdout, stderr = process.communicate()
     if process.returncode == 0:
-        python_utils.PRINT('Lighthouse checks completed successfully.')
+        print('Lighthouse checks completed successfully.')
     else:
-        python_utils.PRINT('Return code: %s' % process.returncode)
-        python_utils.PRINT('OUTPUT:')
+        print('Return code: %s' % process.returncode)
+        print('OUTPUT:')
         # Standard output is in bytes, we need to decode the line to
         # print it.
-        python_utils.PRINT(stdout.decode('utf-8'))
-        python_utils.PRINT('ERROR:')
+        print(stdout.decode('utf-8'))
+        print('ERROR:')
         # Error output is in bytes, we need to decode the line to
         # print it.
-        python_utils.PRINT(stderr.decode('utf-8'))
-        python_utils.PRINT(
-            'Lighthouse checks failed. More details can be found above.')
+        print(stderr.decode('utf-8'))
+        print('Lighthouse checks failed. More details can be found above.')
         sys.exit(1)
 
 
-def main(args=None):
+def main(args: Optional[List[str]] = None) -> None:
     """Runs lighthouse checks and deletes reports."""
     parsed_args = _PARSER.parse_args(args=args)
+
+    # Verify if Chrome is installed.
+    common.setup_chrome_bin_env_variable()
 
     if parsed_args.mode == LIGHTHOUSE_MODE_ACCESSIBILITY:
         lighthouse_mode = LIGHTHOUSE_MODE_ACCESSIBILITY
         server_mode = SERVER_MODE_DEV
-    elif parsed_args.mode == LIGHTHOUSE_MODE_PERFORMANCE:
+    else:
         lighthouse_mode = LIGHTHOUSE_MODE_PERFORMANCE
         server_mode = SERVER_MODE_PROD
-    else:
-        raise Exception(
-            'Invalid parameter passed in: \'%s\', please choose'
-            'from \'accessibility\' or \'performance\'' % parsed_args.mode)
 
     if lighthouse_mode == LIGHTHOUSE_MODE_PERFORMANCE:
-        python_utils.PRINT('Building files in production mode.')
+        print('Building files in production mode.')
         build.main(args=['--prod_env'])
-    elif lighthouse_mode == LIGHTHOUSE_MODE_ACCESSIBILITY:
+    else:
         build.main(args=[])
+        common.run_ng_compilation()
         run_webpack_compilation()
 
     with contextlib.ExitStack() as stack:
@@ -214,5 +217,5 @@ def main(args=None):
         run_lighthouse_checks(lighthouse_mode, parsed_args.shard)
 
 
-if __name__ == '__main__':
+if __name__ == '__main__': # pragma: no cover
     main()

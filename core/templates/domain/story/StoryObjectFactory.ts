@@ -20,13 +20,12 @@
 import { downgradeInjectable } from '@angular/upgrade/static';
 import { Injectable } from '@angular/core';
 
-import constants from 'assets/constants';
+import { AppConstants } from 'app.constants';
 
 import {
   StoryContentsBackendDict,
-  StoryContents,
-  StoryContentsObjectFactory
-} from 'domain/story/StoryContentsObjectFactory';
+  StoryContents
+} from 'domain/story/story-contents-object.model';
 
 export interface StoryBackendDict {
   'id': string;
@@ -44,27 +43,24 @@ export interface StoryBackendDict {
 }
 
 export class Story {
-  // Assigning union type of "string | null" to some fields,
-  // Because we are assigning null to those fields when we create
-  // interstitial story.
-  _id: string | null;
+  _id: string;
   _title: string;
   _description: string;
   _notes: string;
-  _storyContents: StoryContents | null;
+  _storyContents: StoryContents;
   _languageCode: string;
   _version: number;
-  _correspondingTopicId: string | null;
+  _correspondingTopicId: string;
   _thumbnailFilename: string | null;
   _thumbnailBgColor: string | null;
-  _urlFragment: string | null;
+  _urlFragment: string;
   _metaTagContent: string;
   constructor(
-      id: string | null, title: string, description: string,
-      notes: string, storyContents: StoryContents | null, languageCode: string,
-      version: number, correspondingTopicId: string | null,
+      id: string, title: string, description: string,
+      notes: string, storyContents: StoryContents, languageCode: string,
+      version: number, correspondingTopicId: string,
       thumbnailBgColor: string | null, thumbnailFilename: string | null,
-      urlFragment: string | null, metaTagContent: string) {
+      urlFragment: string, metaTagContent: string) {
     this._id = id;
     this._title = title;
     this._description = description;
@@ -79,10 +75,7 @@ export class Story {
     this._metaTagContent = metaTagContent;
   }
 
-  // Some methods have either string or null return value,
-  // because when we create interstitial story object
-  // their fields get null value.
-  getId(): string | null {
+  getId(): string {
     return this._id;
   }
 
@@ -130,11 +123,11 @@ export class Story {
     return this._version;
   }
 
-  getStoryContents(): StoryContents | null {
+  getStoryContents(): StoryContents {
     return this._storyContents;
   }
 
-  getCorrespondingTopicId(): string | null {
+  getCorrespondingTopicId(): string {
     return this._correspondingTopicId;
   }
 
@@ -142,7 +135,7 @@ export class Story {
     return this._thumbnailFilename;
   }
 
-  setThumbnailFilename(thumbnailFilename: string): void {
+  setThumbnailFilename(thumbnailFilename: string | null): void {
     this._thumbnailFilename = thumbnailFilename;
   }
 
@@ -150,11 +143,11 @@ export class Story {
     return this._thumbnailBgColor;
   }
 
-  setThumbnailBgColor(thumbnailBgColor: string): void {
+  setThumbnailBgColor(thumbnailBgColor: string | null): void {
     this._thumbnailBgColor = thumbnailBgColor;
   }
 
-  getUrlFragment(): string | null {
+  getUrlFragment(): string {
     return this._urlFragment;
   }
 
@@ -168,7 +161,7 @@ export class Story {
       issues.push('Story title should not be empty');
     }
     const VALID_URL_FRAGMENT_REGEX = new RegExp(
-      constants.VALID_URL_FRAGMENT_REGEX);
+      AppConstants.VALID_URL_FRAGMENT_REGEX);
     if (!this._urlFragment) {
       issues.push(
         'Url Fragment should not be empty.');
@@ -180,20 +173,19 @@ export class Story {
       }
       if (
         this._urlFragment.length >
-        constants.MAX_CHARS_IN_STORY_URL_FRAGMENT) {
+        AppConstants.MAX_CHARS_IN_STORY_URL_FRAGMENT
+      ) {
         issues.push(
           'Url Fragment should not be greater than ' +
-          `${constants.MAX_CHARS_IN_STORY_URL_FRAGMENT} characters`);
+          `${AppConstants.MAX_CHARS_IN_STORY_URL_FRAGMENT} characters`);
       }
     }
-    if (this._storyContents !== null) {
-      issues = issues.concat(this._storyContents.validate());
-    }
+    issues = issues.concat(this._storyContents.validate());
     return issues;
   }
 
   prepublishValidate(): string[] {
-    const metaTagContentCharLimit = constants.MAX_CHARS_IN_META_TAG_CONTENT;
+    const metaTagContentCharLimit = AppConstants.MAX_CHARS_IN_META_TAG_CONTENT;
     let issues = [];
     if (!this._thumbnailFilename) {
       issues.push('Story should have a thumbnail.');
@@ -231,12 +223,12 @@ export class Story {
   providedIn: 'root'
 })
 export class StoryObjectFactory {
-  constructor(private storyContentsObjectFactory: StoryContentsObjectFactory) {}
+  constructor() {}
   createFromBackendDict(storyBackendDict: StoryBackendDict): Story {
     return new Story(
       storyBackendDict.id, storyBackendDict.title,
       storyBackendDict.description, storyBackendDict.notes,
-      this.storyContentsObjectFactory.createFromBackendDict(
+      StoryContents.createFromBackendDict(
         storyBackendDict.story_contents),
       storyBackendDict.language_code,
       storyBackendDict.version, storyBackendDict.corresponding_topic_id,
@@ -244,18 +236,6 @@ export class StoryObjectFactory {
       storyBackendDict.thumbnail_filename,
       storyBackendDict.url_fragment, storyBackendDict.meta_tag_content
     );
-  }
-
-  /**
- * TODO(#14169): Remove the interstitial story so that full story can be
- * created from start.
- */
-  // Create an interstitial story that would be displayed in the editor until
-  // the actual story is fetched from the backend.
-  createInterstitialStory(): Story {
-    return new Story(
-      null, 'Story title loading', 'Story description loading',
-      'Story notes loading', null, 'en', 1, null, null, null, null, '');
   }
 }
 

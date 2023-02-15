@@ -24,17 +24,15 @@ import { WindowRef } from 'services/contextual/window-ref.service';
 import { CurrentInteractionService } from 'pages/exploration-player-page/services/current-interaction.service';
 import { InteractiveNumericExpressionInput } from './oppia-interactive-numeric-expression-input.component';
 import { InteractionAttributesExtractorService } from 'interactions/interaction-attributes-extractor.service';
-import { importAllAngularServices } from 'tests/unit-test-utils.ajs';
+import { NumericExpressionAnswer } from 'interactions/answer-defs';
 
 describe('NumericExpressionInputInteractive', () => {
-  importAllAngularServices();
-
   let component: InteractiveNumericExpressionInput;
   let fixture: ComponentFixture<InteractiveNumericExpressionInput>;
   let windowRef: WindowRef;
   let guppyInitializationService: GuppyInitializationService;
   let deviceInfoService: DeviceInfoService;
-  let mockCurrentInteractionService;
+  let mockCurrentInteractionService: CurrentInteractionService;
   let mockGuppyObject = {
     divId: '1',
     guppyInstance: {
@@ -44,23 +42,30 @@ describe('NumericExpressionInputInteractive', () => {
     }
   };
   class MockGuppy {
+    static focused = true;
     constructor(id: string, config: Object) {}
 
     asciimath() {
       return 'Dummy value';
     }
+
     configure(name: string, val: Object): void {}
     static event(name: string, handler: Function): void {
-      handler({focused: true});
+      handler({focused: MockGuppy.focused});
     }
+
     static configure(name: string, val: Object): void {}
     static 'remove_global_symbol'(symbol: string): void {}
     static 'add_global_symbol'(name: string, symbol: Object): void {}
   }
 
   class MockCurrentInteractionService {
-    onSubmit(answer, rulesService) {}
-    registerCurrentInteraction(submitAnswerFn, validateExpressionFn) {
+    onSubmit(
+        answer: NumericExpressionAnswer, rulesService: CurrentInteractionService
+    ) {}
+
+    registerCurrentInteraction(
+        submitAnswerFn: Function, validateExpressionFn: Function) {
       submitAnswerFn();
       validateExpressionFn();
     }
@@ -100,7 +105,16 @@ describe('NumericExpressionInputInteractive', () => {
 
   beforeEach(() => {
     windowRef = TestBed.inject(WindowRef);
-    windowRef.nativeWindow.Guppy = MockGuppy;
+    // TODO(#16734): Introduce the "as unknown as X" convention for testing
+    // and remove comments that explain it.
+    // We need to mock guppy for the test. The mock guppy only has partial
+    // functionality when compared to the Guppy. This is because we only use
+    // certain methods or data from the Guppy in the test we are testing.
+    // Mocking the full object is a waste of time and effort. However,
+    // the typescript strict checks will complain about this assignment. In
+    // order to get around this, we typecast the Mock to unknown and then
+    // to the type which we are mocking.
+    windowRef.nativeWindow.Guppy = MockGuppy as unknown as Guppy;
     guppyInitializationService = TestBed.inject(GuppyInitializationService);
     mockCurrentInteractionService = TestBed.inject(CurrentInteractionService);
     deviceInfoService = TestBed.inject(DeviceInfoService);
@@ -126,7 +140,7 @@ describe('NumericExpressionInputInteractive', () => {
     component.submitAnswer();
     expect(mockCurrentInteractionService.onSubmit).not.toHaveBeenCalled();
     expect(component.warningText).toBe(
-      'Your answer seems to be missing a variable/number after the "/".');
+      'Your answer seems to be missing a number after the ÷ operator.');
   });
 
   it('should submit the answer if valid', function() {
@@ -161,5 +175,13 @@ describe('NumericExpressionInputInteractive', () => {
     expect(guppyInitializationService.getShowOSK()).toBeFalse();
     component.showOSK();
     expect(guppyInitializationService.getShowOSK()).toBeTrue();
+  });
+
+  it('should initialize component.value with an empty string', () => {
+    spyOn(guppyInitializationService, 'findActiveGuppyObject').and.returnValue(
+      mockGuppyObject as GuppyObject);
+    MockGuppy.focused = false;
+    component.ngOnInit();
+    expect(component.value).not.toBeNull();
   });
 });

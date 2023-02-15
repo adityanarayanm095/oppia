@@ -21,6 +21,7 @@ import { TestBed } from '@angular/core/testing';
 
 import { ContextService } from 'services/context.service';
 import { UrlService } from 'services/contextual/url.service';
+import { BlogPostPageService } from 'pages/blog-post-page/services/blog-post-page.service';
 
 import { WindowRef } from 'services/contextual/window-ref.service';
 import { UrlInterpolationService } from
@@ -45,6 +46,7 @@ class MockWindowRef {
       }
     }
   };
+
   get nativeWindow() {
     return this._window;
   }
@@ -54,6 +56,7 @@ describe('Context service', () => {
   let ecs: ContextService;
   let urlService: UrlService;
   let windowRef: MockWindowRef;
+  let blogPostPageService: BlogPostPageService;
 
   describe('behavior in the exploration learner view', () => {
     beforeEach(() => {
@@ -336,7 +339,7 @@ describe('Context service', () => {
       });
   });
 
-  describe('behavior in the blog dashboarrd page', () => {
+  describe('behavior in the blog dashboard page', () => {
     beforeEach(() => {
       ecs = TestBed.get(ContextService);
       urlService = TestBed.get(UrlService);
@@ -381,6 +384,91 @@ describe('Context service', () => {
 
         expect(ecs.canAddOrEditComponents()).toBe(true);
       });
+
+    it('should check if rte is in blog post editor', () => {
+      expect(ecs.isInBlogPostEditorPage()).toBe(false);
+
+      spyOn(urlService, 'getPathname').and.returnValue(
+        '/blog-dashboard');
+
+      expect(ecs.isInBlogPostEditorPage()).toBe(true);
+    });
+  });
+
+  describe('behavior in the blog home pages', () => {
+    beforeEach(() => {
+      ecs = TestBed.get(ContextService);
+      urlService = TestBed.get(UrlService);
+      blogPostPageService = TestBed.get(BlogPostPageService);
+      ecs.removeCustomEntityContext();
+    });
+
+    it('should correctly retrieve the entity type', () => {
+      expect(ecs.getEntityType()).toBeUndefined();
+
+      spyOn(urlService, 'getPathname').and.returnValue(
+        '/blog');
+
+      expect(ecs.getEntityType()).toBe('blog_post');
+    });
+
+    it('should correctly retrieve the blog post id', () => {
+      expect(ecs.getEntityId()).toBe('undefined');
+
+      spyOn(urlService, 'getPathname').and.returnValue(
+        '/blog');
+      blogPostPageService.blogPostId = 'sample123456';
+
+      expect(ecs.getEntityId()).toBe('sample123456');
+    });
+  });
+
+  describe('behavior in the edit learner group page', () => {
+    beforeEach(() => {
+      windowRef = new MockWindowRef();
+      TestBed.configureTestingModule({
+        providers: [
+          UrlInterpolationService,
+          { provide: WindowRef, useValue: windowRef },
+        ],
+      });
+      ecs = TestBed.get(ContextService);
+      urlService = TestBed.get(UrlService);
+      ecs.removeCustomEntityContext();
+    });
+
+    it('should correctly retrieve the learner group id', () => {
+      spyOn(urlService, 'getPathname').and.returnValue(
+        '/edit-learner-group/groupId');
+      expect(ecs.getLearnerGroupId()).toBe('groupId');
+    });
+
+    it('should correctly retrieve the page context', () => {
+      spyOn(urlService, 'getPathname').and.returnValue(
+        '/edit-learner-group/groupId');
+      expect(ecs.getPageContext()).toBe('learner_group_editor');
+    });
+
+    it('should retrieve the learner group id cached before', () => {
+      windowRef.nativeWindow.location.pathname = '/edit-learner-group/groupId1';
+      expect(ecs.getLearnerGroupId()).toBe('groupId1');
+      windowRef.nativeWindow.location.pathname = '/edit-learner-group/groupId2';
+      expect(ecs.getLearnerGroupId()).toBe('groupId1');
+    });
+  });
+
+  describe('behavior in the learner group viewer page', () => {
+    beforeEach(() => {
+      ecs = TestBed.get(ContextService);
+      urlService = TestBed.get(UrlService);
+      spyOn(urlService, 'getPathname').and.returnValue(
+        '/learner-group/groupId');
+      ecs.removeCustomEntityContext();
+    });
+
+    it('should correctly retrieve the learner group id', () => {
+      expect(ecs.getLearnerGroupId()).toBe('groupId');
+    });
   });
 
   describe('behavior in different pages', () => {
@@ -443,14 +531,25 @@ describe('Context service', () => {
       }
     );
 
+    it('should throw an error when trying to retrieve the learner group id',
+      () => {
+        expect(() => ecs.getLearnerGroupId()).toThrowError(
+          'ContextService should not be used outside the ' +
+          'context of a learner group.');
+      }
+    );
+
     it('should retrieve other as page context', () => {
       expect(ecs.getPageContext()).toBe('other');
     }
     );
 
     it('should detect editor tab context is preview', () => {
+      let urlServiceGetHash = spyOn(urlService, 'getHash');
+      urlServiceGetHash.and.returnValue('#/settings');
       expect(ecs.getEditorTabContext()).toBeNull();
-      spyOn(urlService, 'getHash').and.returnValue('#/preview');
+
+      urlServiceGetHash.and.returnValue('#/preview');
       expect(ecs.getEditorTabContext()).toBe('preview');
     });
 

@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Dict, List, Tuple
 
 
 class TakeoutData:
@@ -26,7 +26,7 @@ class TakeoutData:
 
     def __init__(
         self,
-        user_data: Dict[str, Dict[str, Any]],
+        user_data: Dict[str, Dict[str, str]],
         user_images: List[TakeoutImage]
     ) -> None:
         """Constructs a TakeoutData domain object.
@@ -67,7 +67,10 @@ class TakeoutImageReplacementInstruction:
     """
 
     def __init__(
-        self, dictionary_path: Tuple[str], export_filename: str, new_key: str
+        self,
+        dictionary_path: Tuple[str, ...],
+        export_filename: str,
+        new_key: str
     ) -> None:
         """Constructs a TakeoutImageReplacementInstruction object.
 

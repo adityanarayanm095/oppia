@@ -77,7 +77,10 @@ import { ReviewTestBackendApiService } from
 import { StoryViewerBackendApiService } from
   'domain/story_viewer/story-viewer-backend-api.service';
 import { ServicesConstants } from 'services/services.constants';
-import 'third-party-imports/ckeditor.import.ts';
+// Relative path used as an work around to get the angular compiler and webpack
+// build to not complain.
+// TODO(#16309): Fix relative imports.
+import '../third-party-imports/ckeditor.import';
 
 import { NoninteractiveCollapsible } from 'rich_text_components/Collapsible/directives/oppia-noninteractive-collapsible.component';
 import { NoninteractiveImage } from 'rich_text_components/Image/directives/oppia-noninteractive-image.component';
@@ -118,13 +121,38 @@ const componentMap = {
   }
 };
 
+export const registerCustomElements = (injector: Injector): void => {
+  for (const rteKey of Object.keys(ServicesConstants.RTE_COMPONENT_SPECS)) {
+    const rteElement = createCustomElement(
+      componentMap[rteKey].component_class,
+      {injector});
+    // Check if the custom elements have been previously defined. We can't
+    // redefine custom elements with the same id. Root cause for the element
+    // being already defined is not yet known. Can possibly be a side effect of
+    // webpack and AoT bundles co-existing.
+    // TODO(#16718): Investigate custom element already defined error.
+    if (
+      customElements.get(
+        'oppia-noninteractive-ckeditor-' +
+        ServicesConstants.RTE_COMPONENT_SPECS[rteKey].frontend_id
+      ) !== undefined
+    ) {
+      continue;
+    }
+    customElements.define(
+      'oppia-noninteractive-ckeditor-' +
+      ServicesConstants.RTE_COMPONENT_SPECS[rteKey].frontend_id,
+      rteElement
+    );
+  }
+};
+
 @Component({
   selector: 'oppia-angular-root',
   templateUrl: './oppia-angular-root.component.html'
 })
 export class OppiaAngularRootComponent implements AfterViewInit {
-  @Output()
-    public initialized: EventEmitter<void> = new EventEmitter();
+  @Output() public initialized: EventEmitter<void> = new EventEmitter();
   direction: string = 'ltr';
 
   static classroomBackendApiService: ClassroomBackendApiService;
@@ -160,17 +188,7 @@ export class OppiaAngularRootComponent implements AfterViewInit {
     if (OppiaAngularRootComponent.rteElementsAreInitialized) {
       return;
     }
-
-    for (const rteKey of Object.keys(ServicesConstants.RTE_COMPONENT_SPECS)) {
-      const rteElement = createCustomElement(
-        componentMap[rteKey].component_class,
-        {injector: this.injector});
-      customElements.define(
-        'oppia-noninteractive-' +
-        ServicesConstants.RTE_COMPONENT_SPECS[rteKey].frontend_id,
-        rteElement
-      );
-    }
+    registerCustomElements(this.injector);
     OppiaAngularRootComponent.rteElementsAreInitialized = true;
   }
 
@@ -244,10 +262,10 @@ export class OppiaAngularRootComponent implements AfterViewInit {
     ]);
 
     // Initialize translations.
-    this.i18nService.initialize();
     this.i18nService.directionChangeEventEmitter.subscribe((direction) => {
       this.direction = direction;
     });
+    this.i18nService.initialize();
 
     // This emit triggers ajs to start its app.
     this.initialized.emit();

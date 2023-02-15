@@ -18,6 +18,10 @@
 import { EventEmitter } from '@angular/core';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { NgbModal, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
+import { RecordedVoiceovers } from 'domain/exploration/recorded-voiceovers.model';
+import { SubtitledHtml } from 'domain/exploration/subtitled-html.model';
+import { ConceptCard } from 'domain/skill/ConceptCardObjectFactory';
+import { Skill } from 'domain/skill/SkillObjectFactory';
 import { StoryUpdateService } from 'domain/story/story-update.service';
 import { FocusManagerService } from 'services/stateful/focus-manager.service';
 import { importAllAngularServices } from 'tests/unit-test-utils.ajs';
@@ -47,7 +51,7 @@ describe('Story node editor directive', function() {
   var story = null;
   var WindowDimensionsService = null;
   var storyUpdateService: StoryUpdateService = null;
-  var ExplorationIdValidationService = null;
+  var CuratedExplorationValidationService = null;
   var AlertsService = null;
   var StoryEditorStateService = null;
   var StoryObjectFactory = null;
@@ -58,8 +62,8 @@ describe('Story node editor directive', function() {
     $rootScope = $injector.get('$rootScope');
     $scope = $rootScope.$new();
     WindowDimensionsService = $injector.get('WindowDimensionsService');
-    ExplorationIdValidationService = $injector.get(
-      'ExplorationIdValidationService');
+    CuratedExplorationValidationService = $injector.get(
+      'CuratedExplorationValidationService');
     AlertsService = $injector.get('AlertsService');
     storyUpdateService = $injector.get('StoryUpdateService');
     StoryObjectFactory = $injector.get('StoryObjectFactory');
@@ -127,6 +131,40 @@ describe('Story node editor directive', function() {
         return deferred.promise;
       }
     };
+
+    var MockSkillBackendApiService = {
+      fetchMultiSkillsAsync: (skillIds) => {
+        // The skillId ='2' case is used to test the case when the
+        // SkillBackendApiService rejects the request.
+        if (skillIds[0] === '2') {
+          return $q.reject();
+        } else {
+          var deferred = $q.defer();
+          deferred.resolve([
+            new Skill(
+              '1', 'test', [], [],
+              new ConceptCard(
+                new SubtitledHtml(
+                  '', '1'), [], RecordedVoiceovers.createEmpty()),
+              'en', 1, 1, '0', true, []),
+            new Skill(
+              '2', 'test2', [], [],
+              new ConceptCard(
+                new SubtitledHtml(
+                  '', '1'), [], RecordedVoiceovers.createEmpty()),
+              'en', 1, 1, '0', true, []),
+            new Skill(
+              '3', 'test3', [], [],
+              new ConceptCard(
+                new SubtitledHtml(
+                  '', '1'), [], RecordedVoiceovers.createEmpty()),
+              'en', 1, 1, '0', true, [])
+          ]);
+          return deferred.promise;
+        }
+      }
+    };
+
     $scope.getId = () => 'node_1';
     $scope.getOutline = () => 'This is outline';
     $scope.getDescription = () => 'Chapter description';
@@ -141,6 +179,8 @@ describe('Story node editor directive', function() {
       $scope: $scope,
       TopicsAndSkillsDashboardBackendApiService:
       MockTopicsAndSkillsDashboardBackendApiService,
+      SkillBackendApiService:
+      MockSkillBackendApiService,
       NgbModal: ngbModal
     });
     ctrl.$onInit();
@@ -161,6 +201,27 @@ describe('Story node editor directive', function() {
   it('should return skill editor URL', function() {
     expect($scope.getSkillEditorUrl('skill_1')).toEqual(
       '/skill_editor/skill_1');
+  });
+
+  it('should fetch the descriptions for prerequisite skills', function() {
+    spyOn($scope, 'getPrerequisiteSkillIds').and.returnValues(['1', '2', '3']);
+
+    $scope.getPrerequisiteSkillsDescription();
+    $rootScope.$apply();
+
+    expect($scope.skillIdToSummaryMap).toEqual(
+      {1: 'test', 2: 'test2', 3: 'test3'}
+    );
+  });
+
+  it('should call Alerts Service if getting skill desc. fails', function() {
+    spyOn($scope, 'getPrerequisiteSkillIds').and.returnValue(['2']);
+    var alertsSpy = spyOn(AlertsService, 'addWarning').and.callThrough();
+
+    $scope.getPrerequisiteSkillsDescription();
+    $rootScope.$apply();
+
+    expect(alertsSpy).toHaveBeenCalled();
   });
 
   it('should check if exploration can be saved', function() {
@@ -260,7 +321,7 @@ describe('Story node editor directive', function() {
     'add a prerequisite skill id which already exists', fakeAsync(function() {
     spyOn(storyUpdateService, 'addPrerequisiteSkillIdToNode')
       .and.callFake(() => {
-        throw new Error('skill id already exist.');
+        throw new Error('Given skill is already a prerequisite skill');
       });
     let alertsSpy = spyOn(AlertsService, 'addInfoMessage')
       .and.returnValue(null);
@@ -371,15 +432,15 @@ describe('Story node editor directive', function() {
     expect($scope.chapterOutlineButtonsAreShown).toEqual(false);
   });
 
-  it('should call StoryUpdateService and ExplorationIdValidationService' +
+  it('should call StoryUpdateService and CuratedExplorationValidationService' +
       ' to set node exploration id if story is published',
   function() {
     spyOn(StoryEditorStateService, 'isStoryPublished').and.returnValue(true);
     var deferred = $q.defer();
     deferred.resolve(true);
     var expSpy = spyOn(
-      ExplorationIdValidationService, 'isExpPublishedAsync').and.returnValue(
-      deferred.promise);
+      CuratedExplorationValidationService, 'isExpPublishedAsync'
+    ).and.returnValue(deferred.promise);
     var storyUpdateSpy = spyOn(storyUpdateService, 'setStoryNodeExplorationId');
 
     $scope.updateExplorationId('exp10');
@@ -396,8 +457,8 @@ describe('Story node editor directive', function() {
     var deferred = $q.defer();
     deferred.resolve(false);
     var expSpy = spyOn(
-      ExplorationIdValidationService, 'isExpPublishedAsync').and.returnValue(
-      deferred.promise);
+      CuratedExplorationValidationService, 'isExpPublishedAsync'
+    ).and.returnValue(deferred.promise);
     var storyUpdateSpy = spyOn(
       storyUpdateService, 'setStoryNodeExplorationId');
 

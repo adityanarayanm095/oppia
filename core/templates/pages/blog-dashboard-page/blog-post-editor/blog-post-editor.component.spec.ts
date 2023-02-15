@@ -23,10 +23,8 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCardModule } from '@angular/material/card';
 import { NgbModal, NgbModalModule, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { CapitalizePipe } from 'filters/string-utility-filters/capitalize.pipe';
-import { AngularHtmlBindWrapperDirective } from 'components/angular-html-bind/angular-html-bind-wrapper.directive';
 import { MaterialModule } from 'modules/material.module';
 import { BlogDashboardPageService } from 'pages/blog-dashboard-page/services/blog-dashboard-page.service';
-import { SchemaBasedEditorDirective } from 'components/forms/schema-based-editors/schema-based-editor.directive';
 import { BlogPostEditorComponent } from './blog-post-editor.component';
 import { UrlInterpolationService } from 'domain/utilities/url-interpolation.service';
 import { BlogPostEditorBackendApiService } from 'domain/blog/blog-post-editor-backend-api.service';
@@ -63,8 +61,8 @@ describe('Blog Post Editor Component', () => {
 
   let sampleBlogPostBackendDict = {
     id: 'sampleBlogId',
-    author_username: 'test_user',
-    title: 'sample_title',
+    displayed_author_name: 'test_user',
+    title: 'sample title',
     content: '<p>hello</p>',
     thumbnail_filename: 'image.png',
     tags: ['learners', 'news'],
@@ -98,8 +96,6 @@ describe('Blog Post Editor Component', () => {
       ],
       declarations: [
         BlogPostEditorComponent,
-        SchemaBasedEditorDirective,
-        AngularHtmlBindWrapperDirective,
         UploadBlogPostThumbnailComponent,
         ImageUploaderComponent,
         MockTranslatePipe
@@ -119,7 +115,7 @@ describe('Blog Post Editor Component', () => {
             isWindowNarrow: () => true,
             getResizeEvent() {
               return {
-                subscribe: (callb) => {
+                subscribe: (callb: () => void) => {
                   callb();
                   return {
                     unsubscribe() {}
@@ -171,7 +167,6 @@ describe('Blog Post Editor Component', () => {
   });
 
   it('should initialize', () => {
-    let expectedBlogPost = BlogPostData.createInterstitialBlogPost();
     let defaultImageUrl = 'banner_image_url';
     spyOn(urlInterpolationService, 'getStaticImageUrl')
       .and.returnValue(defaultImageUrl);
@@ -183,15 +178,14 @@ describe('Blog Post Editor Component', () => {
     component.ngOnInit();
 
     expect(loaderService.showLoadingScreen).toHaveBeenCalled();
-    expect(component.blogPostData).toEqual(expectedBlogPost);
     expect(component.blogPostId).toEqual('');
     expect(component.MAX_CHARS_IN_BLOG_POST_TITLE).toBe(
       AppConstants.MAX_CHARS_IN_BLOG_POST_TITLE);
     expect(component.initEditor).toHaveBeenCalled;
-    expect(loaderService.hideLoadingScreen).toHaveBeenCalled();
     expect(component.DEFAULT_PROFILE_PICTURE_URL).toEqual(defaultImageUrl);
     expect(windowDimensionsService.isWindowNarrow).toHaveBeenCalled();
     expect(component.windowIsNarrow).toBe(true);
+    expect(loaderService.hideLoadingScreen).not.toHaveBeenCalled();
   });
 
   it('should set image uploader window size', () => {
@@ -208,13 +202,9 @@ describe('Blog Post Editor Component', () => {
       .toEqual(component.HTML_SCHEMA);
   });
 
-  it('should return true for header enabled callback', () => {
-    expect(component.headersAreEnabledCallBack()).toBe(true);
-  });
-
   it('should successfully fetch blog post editor data', fakeAsync(() => {
     let blogPostEditorData = {
-      username: 'test_user',
+      displayedAuthorName: 'test_user',
       profilePictureDataUrl: 'sample_url',
       listOfDefaulTags: ['news', 'Learners'],
       maxNumOfTags: 2,
@@ -229,7 +219,7 @@ describe('Blog Post Editor Component', () => {
 
     expect(blogPostEditorBackendApiService.fetchBlogPostEditorData)
       .toHaveBeenCalled();
-    expect(component.authorUsername).toEqual('test_user');
+    expect(component.authorName).toEqual('test_user');
     expect(component.blogPostData).toEqual(sampleBlogPostData);
     expect(component.authorProfilePictureUrl).toEqual('sample_url');
     expect(component.defaultTagsList).toEqual(['news', 'Learners']);
@@ -240,7 +230,7 @@ describe('Blog Post Editor Component', () => {
     expect(blogDashboardPageService.imageUploaderIsNarrow).toBe(true);
     expect(component.dateTimeLastSaved).toEqual(
       'November 21, 2014 at 04:52 AM');
-    expect(component.title).toEqual('sample_title');
+    expect(component.title).toEqual('sample title');
     expect(component.contentEditorIsActive).toBe(false);
     expect(component.lastChangesWerePublished).toBe(true);
     expect(preventPageUnloadEventService.removeListener).toHaveBeenCalled();
@@ -264,16 +254,83 @@ describe('Blog Post Editor Component', () => {
       expect(blogDashboardPageService.navigateToMainTab).toHaveBeenCalled();
     }));
 
-  it('should update local title value', () => {
-    spyOn(blogPostUpdateService, 'setBlogPostTitle');
+  it('should update local title value when title is unique and valid',
+    fakeAsync(() => {
+      spyOn(
+        blogPostEditorBackendApiService,
+        'doesPostWithGivenTitleAlreadyExistAsync'
+      ).and.returnValue(Promise.resolve(false));
+      spyOn(blogPostUpdateService, 'setBlogPostTitle');
+      component.title = 'Sample title changed';
+
+      component.blogPostData = sampleBlogPostData;
+      component.updateLocalTitleValue();
+
+      expect(blogPostUpdateService.setBlogPostTitle).toHaveBeenCalledWith(
+        sampleBlogPostData, 'Sample title changed');
+      expect(preventPageUnloadEventService.addListener).toHaveBeenCalled();
+      expect(component.blogPostData.titleIsDuplicate).toBeFalse();
+    })
+  );
+
+  it('should not update title and should raise error when the title is' +
+  ' duplicate', fakeAsync(() => {
+    spyOn(
+      blogPostEditorBackendApiService,
+      'doesPostWithGivenTitleAlreadyExistAsync'
+    ).and.returnValue(Promise.resolve(true));
+    spyOn(alertsService, 'addWarning');
     component.title = 'Sample title changed';
 
     component.blogPostData = sampleBlogPostData;
     component.updateLocalTitleValue();
+    tick();
 
-    expect(blogPostUpdateService.setBlogPostTitle).toHaveBeenCalledWith(
-      sampleBlogPostData, 'Sample title changed');
+    expect(alertsService.addWarning).toHaveBeenCalledWith(
+      'Blog Post with the given title exists already. Please use a' +
+      ' different title.'
+    );
     expect(preventPageUnloadEventService.addListener).toHaveBeenCalled();
+    expect(component.blogPostData.titleIsDuplicate).toBeTrue();
+  }));
+
+  it('should not update title and should raise error when the checking for' +
+  'uniqueness of the title fails', fakeAsync(() => {
+    spyOn(
+      blogPostEditorBackendApiService,
+      'doesPostWithGivenTitleAlreadyExistAsync'
+    ).and.returnValue(Promise.reject('Internal Server Error'));
+    spyOn(alertsService, 'addWarning');
+    component.title = 'Sample title changed';
+
+    component.blogPostData = sampleBlogPostData;
+    component.updateLocalTitleValue();
+    tick();
+
+    expect(alertsService.addWarning).toHaveBeenCalledWith(
+      'Failed to check if title is unique. ' +
+      'Internal Error: Internal Server Error'
+    );
+    expect(preventPageUnloadEventService.addListener).toHaveBeenCalled();
+    expect(component.blogPostData.titleIsDuplicate).toBeFalse();
+  }));
+
+  it('should validate title pattern', () => {
+    //  A valid title contains words (containing a-zA-Z0-9) separated by spaces,
+    // hyphens(-), ampersand(&) and colon(:).
+    // Should return true if the title is valid.
+    component.title = 'valid & correct: title';
+
+    expect(component.isTitlePatternValid()).toBeTrue();
+
+    // Title contains invalid special characters.
+    component.title = 'invalid# character';
+
+    expect(component.isTitlePatternValid()).toBeFalse();
+
+    component.title = 'invalid % character';
+
+    expect(component.isTitlePatternValid()).toBeFalse();
   });
 
   it('should update local edited content', () => {
@@ -331,6 +388,7 @@ describe('Blog Post Editor Component', () => {
 
     component.saveDraft();
 
+    expect(component.saveInProgress).toBeTrue();
     expect(component.updateBlogPostData).toHaveBeenCalledWith(false);
   });
 
@@ -340,17 +398,21 @@ describe('Blog Post Editor Component', () => {
     spyOn(alertsService, 'addWarning');
     component.blogPostData = sampleBlogPostData;
     component.blogPostData.title = '';
+    component.saveInProgress = true;
 
     component.saveDraft();
 
     expect(alertsService.addWarning).toHaveBeenCalledWith(
       'Please fix the errors.');
+    expect(component.saveInProgress).toBe(false);
   });
 
   it('should update blog post data successfully in the backend',
     fakeAsync(() => {
       component.blogPostData = sampleBlogPostData;
       component.blogPostId = sampleBlogPostData.id;
+      component.saveInProgress = true;
+      component.publishingInProgress = true;
       spyOn(blogPostUpdateService, 'getBlogPostChangeDict')
         .and.returnValue({});
       spyOn(blogPostUpdateService, 'setBlogPostTags');
@@ -361,6 +423,7 @@ describe('Blog Post Editor Component', () => {
       component.updateBlogPostData(false);
       tick();
 
+      expect(component.saveInProgress).toBe(false);
       expect(blogPostUpdateService.setBlogPostTags).toHaveBeenCalled();
       expect(alertsService.addSuccessMessage).toHaveBeenCalledWith(
         'Blog Post Saved Successfully.');
@@ -369,6 +432,7 @@ describe('Blog Post Editor Component', () => {
       component.updateBlogPostData(true);
       tick();
 
+      expect(component.publishingInProgress).toBe(false);
       expect(alertsService.addSuccessMessage).toHaveBeenCalledWith(
         'Blog Post Saved and Published Successfully.');
     }));
@@ -377,6 +441,8 @@ describe('Blog Post Editor Component', () => {
     fakeAsync(() => {
       component.blogPostData = sampleBlogPostData;
       component.blogPostId = sampleBlogPostData.id;
+      component.saveInProgress = true;
+      component.publishingInProgress = true;
       spyOn(blogPostUpdateService, 'getBlogPostChangeDict')
         .and.returnValue({});
       spyOn(blogPostEditorBackendApiService, 'updateBlogPostDataAsync')
@@ -390,6 +456,8 @@ describe('Blog Post Editor Component', () => {
         .toHaveBeenCalled();
       expect(alertsService.addWarning).toHaveBeenCalledWith(
         'Failed to save Blog Post. Internal Error: status: 500');
+      expect(component.publishingInProgress).toBe(false);
+      expect(component.saveInProgress).toBe(false);
     }));
 
   it('should get formatted date string from the timestamp in milliseconds',
@@ -459,9 +527,13 @@ describe('Blog Post Editor Component', () => {
       spyOn(component, 'updateBlogPostData');
 
       component.publishBlogPost();
+
+      expect(component.publishingInProgress).toBe(true);
+
       tick();
 
       expect(component.updateBlogPostData).not.toHaveBeenCalled();
+      expect(component.publishingInProgress).toBe(false);
     }));
 
   it('should successfully place call to publish blog post model', fakeAsync(
@@ -524,6 +596,7 @@ describe('Blog Post Editor Component', () => {
 
   it('should display alert when unable to post thumbnail data',
     fakeAsync(() => {
+      component.blogPostData = sampleBlogPostData;
       let imagesData = [{
         filename: 'imageFilename1',
         imageBlob: new Blob([''], { type: 'image/jpeg' })
@@ -555,6 +628,7 @@ describe('Blog Post Editor Component', () => {
       spyOn(alertsService, 'addSuccessMessage');
       spyOn(imageLocalStorageService, 'getStoredImagesData')
         .and.returnValue(imagesData);
+      component.blogPostData = sampleBlogPostData;
 
       component.postImageDataToServer();
       tick();
@@ -567,11 +641,17 @@ describe('Blog Post Editor Component', () => {
     }));
 
   it('should correctly return if the publish button is disabled or not', () => {
+    component.blogPostData = sampleBlogPostData;
     spyOn(component.blogPostData, 'prepublishValidate').and.returnValues(
       [], [], [], ['some issues']);
     component.newChangesAreMade = true;
     component.lastChangesWerePublished = true;
 
+    component.blogPostData.titleIsDuplicate = true;
+
+    expect(component.isPublishButtonDisabled()).toBeTrue();
+
+    component.blogPostData.titleIsDuplicate = false;
     expect(component.isPublishButtonDisabled()).toBe(false);
 
     component.newChangesAreMade = false;

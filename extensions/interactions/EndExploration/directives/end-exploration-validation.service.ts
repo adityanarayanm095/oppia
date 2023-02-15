@@ -59,8 +59,17 @@ export class EndExplorationValidationService {
           type: AppConstants.WARNING_TYPES.ERROR,
           message: 'Recommended exploration ID must be a string.'
         });
+        break;
+      }
+      if (recommendedExplorationIds[i].trim().length === 0) {
+        warningsList.push({
+          type: AppConstants.WARNING_TYPES.ERROR,
+          message: 'Recommended exploration ID must be non-empty.'
+        });
+        break;
       }
     }
+
     return warningsList;
   }
 

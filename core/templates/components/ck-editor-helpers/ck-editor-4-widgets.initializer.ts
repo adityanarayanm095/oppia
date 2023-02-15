@@ -21,7 +21,7 @@ import { NgZone } from '@angular/core';
 import { ContextService } from 'services/context.service';
 import { HtmlEscaperService } from 'services/html-escaper.service';
 
-interface RteComponentSpecs {
+export interface RteComponentSpecs {
   backendId: string;
   customizationArgSpecs: {
     name: string; value: unknown; 'default_value': unknown;
@@ -34,7 +34,7 @@ interface RteComponentSpecs {
   tooltip: string;
 }
 
-interface RteHelperService {
+export interface RteHelperService {
   createCustomizationArgDictFromAttrs: (attrs) => Record<string, unknown>;
   getRichTextComponents: () => RteComponentSpecs[];
   isInlineComponent: (string) => boolean;
@@ -68,7 +68,7 @@ export class CkEditorInitializerService {
         if (CKEDITOR.plugins.registered[ckName] !== undefined) {
           return;
         }
-        var tagName = 'oppia-noninteractive-' + componentDefn.id;
+        var tagName = 'oppia-noninteractive-ckeditor-' + componentDefn.id;
         var customizationArgSpecs = componentDefn.customizationArgSpecs;
         var isInline = rteHelperService.isInlineComponent(componentDefn.id);
 
@@ -115,6 +115,7 @@ export class CkEditorInitializerService {
                   customizationArgSpecs,
                   customizationArgs,
                   function(customizationArgsDict) {
+                    that.data.isCopied = false;
                     for (var arg in customizationArgsDict) {
                       if (customizationArgsDict.hasOwnProperty(arg)) {
                         that.setData(arg, customizationArgsDict[arg]);
@@ -149,13 +150,17 @@ export class CkEditorInitializerService {
                     }
                   },
                   function(widgetShouldBeRemoved) {
-                    if (widgetShouldBeRemoved) {
+                    if (widgetShouldBeRemoved || that.data.isCopied) {
+                      that.data.isCopied = false;
                       var newWidgetSelector = (
                         '[data-cke-widget-id="' + that.id + '"]');
-                      var widgetElement = editor.editable().findOne(
-                        newWidgetSelector);
-                      if (widgetElement) {
-                        widgetElement.remove();
+                      if (newWidgetSelector !== null) {
+                        var widgetElement = editor.editable().findOne(
+                          newWidgetSelector);
+                        if (widgetElement) {
+                          widgetElement.remove();
+                          editor.fire('change');
+                        }
                       }
                     }
                   });
@@ -201,11 +206,13 @@ export class CkEditorInitializerService {
                   const customEl = that.element.getChild(0).$;
                   customEl[capital.join('') + 'WithValue'] = (
                     htmlEscaperService.objToEscapedJson(
-                      that.data[spec.name] || ''));
+                      that.data[spec.name] !== undefined ?
+                      that.data[spec.name] : ''));
                   that.element.getChild(0).setAttribute(
                     spec.name + '-with-value',
                     htmlEscaperService.objToEscapedJson(
-                      that.data[spec.name] || ''));
+                      that.data[spec.name] !== undefined ?
+                      that.data[spec.name] : ''));
                 });
               },
               init: function() {

@@ -59,7 +59,6 @@ describe('StateTopAnswersStatsService', () => {
   const stateBackendDict: StateBackendDict = {
     content: {content_id: 'content', html: 'Say "hello" in Spanish!'},
     linked_skill_id: null,
-    next_content_id_index: 0,
     param_changes: [],
     interaction: {
       answer_groups: [{
@@ -72,17 +71,19 @@ describe('StateTopAnswersStatsService', () => {
         }],
         outcome: {
           dest: 'Me Llamo',
+          dest_if_really_stuck: null,
           feedback: {content_id: 'feedback_1', html: '¡Buen trabajo!'},
           labelled_as_correct: true,
           param_changes: [],
           refresher_exploration_id: null,
           missing_prerequisite_skill_id: null,
         },
-        training_data: null,
+        training_data: [],
         tagged_skill_misconception_id: null,
       }],
       default_outcome: {
         dest: 'Hola',
+        dest_if_really_stuck: null,
         feedback: {content_id: 'default_outcome', html: 'Try again!'},
         labelled_as_correct: false,
         param_changes: [],
@@ -99,7 +100,10 @@ describe('StateTopAnswersStatsService', () => {
             unicode_str: ''
           }
         },
-        rows: { value: 1 }
+        rows: { value: 1 },
+        catchMisspellings: {
+          value: false
+        }
       },
       solution: null,
     },
@@ -113,13 +117,6 @@ describe('StateTopAnswersStatsService', () => {
     },
     solicit_answer_details: false,
     card_is_checkpoint: false,
-    written_translations: {
-      translations_mapping: {
-        content: {},
-        default_outcome: {},
-        feedback_1: {},
-      },
-    },
   };
 
   const makeStates = (statesBackendDict = {Hola: stateBackendDict}): States => {
@@ -295,6 +292,8 @@ describe('StateTopAnswersStatsService', () => {
 
     expect(() => stateTopAnswersStatsService.getStateStats('Hola'))
       .toThrowError('Hola does not exist.');
+    expect(() => stateTopAnswersStatsService.onStateRenamed('Hola', 'Bonjour'))
+      .toThrowError('Hola does not exist.');
   }));
 
   it('should recognize newly resolved answers', fakeAsync(async() => {
@@ -420,6 +419,23 @@ describe('StateTopAnswersStatsService', () => {
       stateTopAnswersStatsService.onStateInteractionSaved(updatedState);
     }).toThrowError('Hola does not exist.');
   }));
+
+  it('should throw error if Interaction id does not exist',
+    fakeAsync(async() => {
+      const states = makeStates();
+      spyOnBackendApiFetchStatsAsync(
+        'Hola', [{answer: 'adios', frequency: 3, is_addressed: false}]);
+      stateTopAnswersStatsService.initAsync(expId, states);
+      flushMicrotasks();
+      await stateTopAnswersStatsService.getInitPromiseAsync();
+
+      const updatedState = states.getState('Hola');
+      updatedState.interaction.id = null;
+
+      expect(() => {
+        stateTopAnswersStatsService.onStateInteractionSaved(updatedState);
+      }).toThrowError('Interaction ID cannot be null.');
+    }));
 
   it('should getTopAnswersByStateNameAsync', fakeAsync(() => {
     const states = makeStates();

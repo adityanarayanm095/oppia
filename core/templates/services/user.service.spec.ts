@@ -35,6 +35,7 @@ class MockWindowRef {
       pathname: 'home'
     }
   };
+
   get nativeWindow() {
     return this._window;
   }
@@ -394,4 +395,51 @@ describe('User Api Service', () => {
     });
     tick();
   }));
+
+  it('should get whether the user can access topics and skills dashboard',
+    fakeAsync(() => {
+      const userInfo = UserInfo.createFromBackendDict({
+        roles: ['USER_ROLE'],
+        is_moderator: true,
+        is_curriculum_admin: true,
+        is_super_admin: true,
+        is_topic_manager: false,
+        can_create_collections: true,
+        preferred_site_language_code: 'en',
+        username: 'tester',
+        email: 'tester@example.org',
+        user_is_logged_in: true
+      });
+      spyOn(
+        userService, 'getUserInfoAsync'
+      ).and.returnValue(Promise.resolve(userInfo));
+
+      userService.canUserAccessTopicsAndSkillsDashboard()
+        .then((canUserAccessTopicsAndSkillsDashboard) => {
+          expect(canUserAccessTopicsAndSkillsDashboard).toBeTrue();
+        });
+    }));
+
+  it('should get whether the user can edit blog posts if user is blog admin',
+    fakeAsync(() => {
+      const userInfo = UserInfo.createFromBackendDict({
+        roles: ['USER_ROLE', 'BLOG_ADMIN'],
+        is_moderator: true,
+        is_curriculum_admin: true,
+        is_super_admin: true,
+        is_topic_manager: false,
+        can_create_collections: true,
+        preferred_site_language_code: 'en',
+        username: 'tester',
+        email: 'tester@example.org',
+        user_is_logged_in: true
+      });
+      spyOn(
+        userService, 'getUserInfoAsync'
+      ).and.returnValue(Promise.resolve(userInfo));
+
+      userService.canUserEditBlogPosts().then((val) => {
+        expect(val).toBeTrue();
+      });
+    }));
 });

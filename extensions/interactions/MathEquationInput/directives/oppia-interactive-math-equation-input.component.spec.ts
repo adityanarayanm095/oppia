@@ -24,6 +24,7 @@ import { WindowRef } from 'services/contextual/window-ref.service';
 import { CurrentInteractionService } from 'pages/exploration-player-page/services/current-interaction.service';
 import { InteractiveMathEquationInput } from './oppia-interactive-math-equation-input.component';
 import { TranslateService } from '@ngx-translate/core';
+import { MathEquationAnswer } from 'interactions/answer-defs';
 
 class MockTranslateService {
   instant(key: string): string {
@@ -37,7 +38,7 @@ describe('MathEquationInputInteractive', () => {
   let windowRef: WindowRef;
   let guppyInitializationService: GuppyInitializationService;
   let deviceInfoService: DeviceInfoService;
-  let mockCurrentInteractionService;
+  let mockCurrentInteractionService: CurrentInteractionService;
   let mockGuppyObject = {
     divId: '1',
     guppyInstance: {
@@ -47,23 +48,29 @@ describe('MathEquationInputInteractive', () => {
     }
   };
   class MockGuppy {
+    static focused = true;
     constructor(id: string, config: Object) {}
 
     asciimath() {
       return 'Dummy value';
     }
+
     configure(name: string, val: Object): void {}
     static event(name: string, handler: Function): void {
-      handler({focused: true});
+      handler({focused: MockGuppy.focused});
     }
+
     static configure(name: string, val: Object): void {}
     static 'remove_global_symbol'(symbol: string): void {}
     static 'add_global_symbol'(name: string, symbol: Object): void {}
   }
 
   class MockCurrentInteractionService {
-    onSubmit(answer, rulesService) {}
-    registerCurrentInteraction(submitAnswerFn, validateExpressionFn) {
+    onSubmit(
+        answer: MathEquationAnswer, rulesService: CurrentInteractionService) {}
+
+    registerCurrentInteraction(
+        submitAnswerFn: Function, validateExpressionFn: Function) {
       submitAnswerFn();
       validateExpressionFn();
     }
@@ -88,7 +95,16 @@ describe('MathEquationInputInteractive', () => {
 
   beforeEach(() => {
     windowRef = TestBed.inject(WindowRef);
-    windowRef.nativeWindow.Guppy = MockGuppy;
+    // TODO(#16734): Introduce the "as unknown as X" convention for testing
+    // and remove comments that explain it.
+    // We need to mock guppy for the test. The mock guppy only has partial
+    // functionality when compared to the Guppy. This is because we only use
+    // certain methods or data from the Guppy in the test we are testing.
+    // Mocking the full object is a waste of time and effort. However,
+    // the typescript strict checks will complain about this assignment. In
+    // order to get around this, we typecast the Mock to unknown and then
+    // to the type which we are mocking.
+    windowRef.nativeWindow.Guppy = MockGuppy as unknown as Guppy;
     guppyInitializationService = TestBed.inject(GuppyInitializationService);
     mockCurrentInteractionService = TestBed.inject(CurrentInteractionService);
     deviceInfoService = TestBed.inject(DeviceInfoService);
@@ -120,9 +136,9 @@ describe('MathEquationInputInteractive', () => {
   it('should submit the answer if valid', function() {
     component.hasBeenTouched = true;
     // Invalid answer.
-    component.value = '(x + y) = 3';
+    component.value = 'x + y = 3';
 
-    spyOn(guppyInitializationService, 'getCustomOskLetters').and.returnValue(
+    spyOn(guppyInitializationService, 'getAllowedVariables').and.returnValue(
       ['x', 'y']);
     spyOn(mockCurrentInteractionService, 'onSubmit');
     component.submitAnswer();
@@ -151,5 +167,13 @@ describe('MathEquationInputInteractive', () => {
     expect(guppyInitializationService.getShowOSK()).toBeFalse();
     component.showOSK();
     expect(guppyInitializationService.getShowOSK()).toBeTrue();
+  });
+
+  it('should initialize component.value with an empty string', () => {
+    spyOn(guppyInitializationService, 'findActiveGuppyObject').and.returnValue(
+      mockGuppyObject as GuppyObject);
+    MockGuppy.focused = false;
+    component.ngOnInit();
+    expect(component.value).not.toBeNull();
   });
 });

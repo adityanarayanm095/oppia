@@ -44,10 +44,12 @@ describe('NumericExpressionEditor', () => {
     asciimath() {
       return 'Dummy value';
     }
+
     configure(name: string, val: Object): void {}
     static event(name: string, handler: Function): void {
       handler({focused: MockGuppy.focused});
     }
+
     static configure(name: string, val: Object): void {}
     static 'remove_global_symbol'(symbol: string): void {}
     static 'add_global_symbol'(name: string, symbol: Object): void {}
@@ -63,7 +65,16 @@ describe('NumericExpressionEditor', () => {
     component = fixture.componentInstance;
     guppyInitializationService = TestBed.inject(GuppyInitializationService);
     deviceInfoService = TestBed.inject(DeviceInfoService);
-    window.Guppy = MockGuppy;
+    // TODO(#16734): Introduce the "as unknown as X" convention for testing
+    // and remove comments that explain it.
+    // We need to mock guppy for the test. The mock guppy only has partial
+    // functionality when compared to the Guppy. This is because we only use
+    // certain methods or data from the Guppy in the test we are testing.
+    // Mocking the full object is a waste of time and effort. However,
+    // the typescript strict checks will complain about this assignment. In
+    // order to get around this, we typecast the Mock to unknown and then
+    // to the type which we are mocking.
+    window.Guppy = MockGuppy as unknown as Guppy;
   })));
 
   afterEach(() => {

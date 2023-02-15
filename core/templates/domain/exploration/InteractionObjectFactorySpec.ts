@@ -58,6 +58,7 @@ describe('Interaction object factory', () => {
     sof = TestBed.inject(SolutionObjectFactory);
     defaultOutcomeDict = {
       dest: 'dest_default',
+      dest_if_really_stuck: null,
       feedback: {
         content_id: 'default_outcome',
         html: ''
@@ -71,6 +72,7 @@ describe('Interaction object factory', () => {
       rule_specs: [],
       outcome: {
         dest: 'dest_1',
+        dest_if_really_stuck: null,
         feedback: {
           content_id: 'outcome_1',
           html: ''
@@ -117,7 +119,10 @@ describe('Interaction object factory', () => {
             unicode_str: 'Enter text'
           }
         },
-        rows: { value: 1 }
+        rows: { value: 1 },
+        catchMisspellings: {
+          value: false
+        }
       },
       default_outcome: defaultOutcomeDict,
       hints: hintsDict,
@@ -136,6 +141,9 @@ describe('Interaction object factory', () => {
       },
       rows: {
         value: 1
+      },
+      catchMisspellings: {
+        value: false
       }
     });
   });
@@ -475,6 +483,7 @@ describe('Interaction object factory', () => {
       rule_specs: [],
       outcome: {
         dest: 'dest_3',
+        dest_if_really_stuck: null,
         feedback: {
           content_id: 'outcome_3',
           html: ''
@@ -491,6 +500,7 @@ describe('Interaction object factory', () => {
       rule_specs: [],
       outcome: {
         dest: 'dest_1',
+        dest_if_really_stuck: null,
         feedback: {
           content_id: 'outcome_1',
           html: ''
@@ -514,6 +524,7 @@ describe('Interaction object factory', () => {
 
     const newDefaultOutcomeDict = {
       dest: 'dest_default_new',
+      dest_if_really_stuck: null,
       feedback: {
         content_id: 'default_outcome_new',
         html: ''
@@ -527,6 +538,7 @@ describe('Interaction object factory', () => {
     expect(testInteraction.defaultOutcome).toEqual(
       oof.createFromBackendDict({
         dest: 'dest_default',
+        dest_if_really_stuck: null,
         feedback: {
           content_id: 'default_outcome',
           html: ''
@@ -553,7 +565,10 @@ describe('Interaction object factory', () => {
       placeholder: {
         value: new SubtitledUnicode('Enter text', 'ca_placeholder_0')
       },
-      rows: { value: 1 }
+      rows: { value: 1 },
+      catchMisspellings: {
+        value: false
+      }
     });
     testInteraction.setCustomizationArgs(newCustomizationArgs);
     expect(testInteraction.customizationArgs).toEqual(newCustomizationArgs);
@@ -610,6 +625,7 @@ describe('Interaction object factory', () => {
       rule_specs: [],
       outcome: {
         dest: 'dest_1_new',
+        dest_if_really_stuck: null,
         feedback: {
           content_id: 'outcome_1_new',
           html: ''
@@ -624,6 +640,7 @@ describe('Interaction object factory', () => {
     }];
     const newDefaultOutcome = {
       dest: 'dest_default_new',
+      dest_if_really_stuck: null,
       feedback: {
         content_id: 'default_outcome_new',
         html: ''
@@ -789,8 +806,11 @@ describe('Interaction object factory', () => {
         }]
       }
     };
-
-    expect(Interaction.getCustomizationArgContentIds(ca)).toEqual(
+    let contentIds = Interaction.getCustomizationArgContents(ca).map(
+      (content) => {
+        return content.contentId;
+      });
+    expect(contentIds).toEqual(
       ['ca_dummyCustArg_content_0', 'ca_dummyCustArg_content_1']);
   });
 

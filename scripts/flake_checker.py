@@ -19,19 +19,45 @@ from __future__ import annotations
 import datetime
 import os
 
-from core import python_utils
-
 import requests
 
-FLAKE_CHECK_AND_REPORT_URL = (
+from typing import Dict, Final, List, Optional, TypedDict
+
+
+class FlakeReportDict(TypedDict):
+    """Dictionary representation of flake's report."""
+
+    log: List[str]
+    result: bool
+    flake: Dict[str, str]
+    rerun: str
+
+
+class EnvVarDict(TypedDict):
+    """Dictionary representation of environment variables."""
+
+    identifier: str
+    user_info: str
+    branch: str
+    build_url_template_vars: List[str]
+
+
+class CIInfoValueDict(TypedDict):
+    """Dictionary representation of CI_INFO dict's values."""
+
+    env: EnvVarDict
+    build_url_template: str
+
+
+FLAKE_CHECK_AND_REPORT_URL: Final = (
     'https://oppia-e2e-test-results-logger.herokuapp.com'
     '/check-flake-and-report')
-PASS_REPORT_URL = (
+PASS_REPORT_URL: Final = (
     'https://oppia-e2e-test-results-logger.herokuapp.com'
     '/report-pass')
-REPORT_API_KEY = '7Ccp062JVjv9LUYwnLMqcm5Eu5gYqqhpl3zQmcO3cDQ'
+REPORT_API_KEY: Final = '7Ccp062JVjv9LUYwnLMqcm5Eu5gYqqhpl3zQmcO3cDQ'
 
-CI_INFO = {
+CI_INFO: Dict[str, CIInfoValueDict] = {
     'githubActions': {
         'env': {
             'identifier': 'GITHUB_ACTIONS',
@@ -52,22 +78,31 @@ CI_INFO = {
     }
 }
 
-REQUEST_EXCEPTIONS = (
+REQUEST_EXCEPTIONS: Final = (
     requests.RequestException, requests.ConnectionError,
     requests.HTTPError, requests.TooManyRedirects, requests.Timeout)
 
+# Rerun policy overrides from logging server.
 
-def _print_color_message(message):
+# Yes, rerun, even if rerun policy says otherwise.
+RERUN_YES: Final = 'rerun yes'
+# No, do not rerun, even if rerun policy says otherwise.
+RERUN_NO: Final = 'rerun no'
+# No instructions from logging server, so follow rerun policy.
+RERUN_UNKNOWN: Final = 'rerun unknown'
+
+
+def _print_color_message(message: str) -> None:
     """Prints the given message in red color.
 
     Args:
         message: str. The success message to print.
     """
     # \033[91m is the ANSI escape sequences for green color.
-    python_utils.PRINT('\033[92m' + message + '\033[0m\n')
+    print('\033[92m' + message + '\033[0m\n')
 
 
-def check_if_on_ci():
+def check_if_on_ci() -> bool:
     """Check if the script is running on a CI server.
 
     Returns: bool. Whether we are running on a CI server.
@@ -79,7 +114,7 @@ def check_if_on_ci():
     return False
 
 
-def _get_build_info():
+def _get_build_info() -> Dict[str, Optional[str]]:
     """Returns the info related to the build container."""
     build_info = {}
 
@@ -110,7 +145,7 @@ def _get_build_info():
     raise Exception('Unknown build environment.')
 
 
-def report_pass(suite_name):
+def report_pass(suite_name: str) -> None:
     """Report a passing test to the logging server."""
     metadata = _get_build_info()
     payload = {
@@ -132,8 +167,21 @@ def report_pass(suite_name):
             PASS_REPORT_URL))
 
 
-def is_test_output_flaky(output_lines, suite_name):
-    """Returns whether the test output matches any flaky test log."""
+def check_test_flakiness(output_lines: List[bytes], suite_name: str) -> bool:
+    """Checks whether the test output matches any flaky test log.
+
+    Whether the test is flaky is printed to the console.
+
+    Args:
+        output_lines: list(bytes). The output from the test run.
+        suite_name: str. Name of the E2E test suite.
+
+    Returns:
+        bool. Whether the test should be rerun.
+
+    Raises:
+        ValueError. Raised if the response from the logging server is invalid.
+    """
     build_info = _get_build_info()
     payload = {
         'suite': suite_name,
@@ -159,11 +207,11 @@ def is_test_output_flaky(output_lines, suite_name):
             response.status_code, response.reason))
         return False
 
-    report = {}
     try:
-        report = response.json()
+        report: FlakeReportDict = response.json()
     except ValueError as e:
         _print_color_message('Unable to convert json response: %s' % e)
+        return False
 
     if 'log' in report:
         log_str = '\n'.join(report['log'])
@@ -180,4 +228,13 @@ def is_test_output_flaky(output_lines, suite_name):
         _print_color_message('    Test: %s' % flake['test'])
         _print_color_message(
             '    Error Message: %s' % flake['flake_id'])
-    return flaky
+    rerun = report['rerun']
+    if rerun not in (RERUN_YES, RERUN_NO):
+        _print_color_message(
+            'Invalid rerun instruction from logging server: %s' % rerun)
+        return False
+    else:
+        _print_color_message(
+            'Rerun instruction from logging server: %s' %
+            'rerun' if rerun == RERUN_YES else 'do not rerun')
+    return rerun == RERUN_YES

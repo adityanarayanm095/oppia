@@ -50,10 +50,12 @@ describe('MathEquationEditor', () => {
     asciimath() {
       return 'Dummy value';
     }
+
     configure(name: string, val: Object): void {}
     static event(name: string, handler: Function): void {
       handler({focused: MockGuppy.focused});
     }
+
     static configure(name: string, val: Object): void {}
     static 'remove_global_symbol'(symbol: string): void {}
     static 'add_global_symbol'(name: string, symbol: Object): void {}
@@ -75,7 +77,16 @@ describe('MathEquationEditor', () => {
     fixture = TestBed.createComponent(
       MathEquationEditorComponent);
     component = fixture.componentInstance;
-    window.Guppy = MockGuppy;
+    // TODO(#16734): Introduce the "as unknown as X" convention for testing
+    // and remove comments that explain it.
+    // We need to mock guppy for the test. The mock guppy only has partial
+    // functionality when compared to the Guppy. This is because we only use
+    // certain methods or data from the Guppy in the test we are testing.
+    // Mocking the full object is a waste of time and effort. However,
+    // the typescript strict checks will complain about this assignment. In
+    // order to get around this, we typecast the Mock to unknown and then
+    // to the type which we are mocking.
+    window.Guppy = MockGuppy as unknown as Guppy;
   });
 
   afterEach(() => {
@@ -128,7 +139,7 @@ describe('MathEquationEditor', () => {
       component.warningText).toBe('Please enter an answer before submitting.');
 
     component.currentValue = 'x=y';
-    spyOn(guppyInitializationService, 'getCustomOskLetters').and.returnValue(
+    spyOn(guppyInitializationService, 'getAllowedVariables').and.returnValue(
       ['x', 'y']);
     expect(component.isCurrentAnswerValid()).toBeTrue();
     expect(component.warningText).toBe('');

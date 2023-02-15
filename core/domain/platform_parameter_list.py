@@ -18,27 +18,68 @@
 
 from __future__ import annotations
 
-from core import python_utils
+import enum
+
 from core.domain import platform_parameter_domain
 from core.domain import platform_parameter_registry as registry
 
 Registry = registry.Registry
-FEATURE_STAGES = platform_parameter_domain.FEATURE_STAGES # pylint: disable=invalid-name
-DATA_TYPES = platform_parameter_domain.DATA_TYPES # pylint: disable=invalid-name
 
-PARAM_NAMES = python_utils.create_enum( # pylint: disable=invalid-name
-    'dummy_feature', 'dummy_parameter')
+
+class ParamNames(enum.Enum):
+    """Enum for parameter names."""
+
+    DUMMY_FEATURE = 'dummy_feature'
+    DUMMY_PARAMETER = 'dummy_parameter'
+
+    END_CHAPTER_CELEBRATION = 'end_chapter_celebration'
+    CHECKPOINT_CELEBRATION = 'checkpoint_celebration'
+    CONTRIBUTOR_DASHBOARD_ACCOMPLISHMENTS = (
+        'contributor_dashboard_accomplishments')
+    ANDROID_BETA_LANDING_PAGE = 'android_beta_landing_page'
+    BLOG_PAGES = 'blog_pages'
+
 
 # Platform parameters should all be defined below.
 
 Registry.create_feature_flag(
-    PARAM_NAMES.dummy_feature,
+    ParamNames.DUMMY_FEATURE,
     'This is a dummy feature flag.',
-    FEATURE_STAGES.dev,
+    platform_parameter_domain.FeatureStages.DEV,
 )
 
 Registry.create_platform_parameter(
-    PARAM_NAMES.dummy_parameter,
+    ParamNames.DUMMY_PARAMETER,
     'This is a dummy platform parameter.',
-    DATA_TYPES.string
+    platform_parameter_domain.DataTypes.STRING
 )
+
+Registry.create_feature_flag(
+    ParamNames.END_CHAPTER_CELEBRATION,
+    'This flag is for the end chapter celebration feature.',
+    platform_parameter_domain.FeatureStages.PROD,
+)
+
+Registry.create_feature_flag(
+    ParamNames.CHECKPOINT_CELEBRATION,
+    'This flag is for the checkpoint celebration feature.',
+    platform_parameter_domain.FeatureStages.PROD,
+)
+
+Registry.create_feature_flag(
+    ParamNames.CONTRIBUTOR_DASHBOARD_ACCOMPLISHMENTS,
+    'This flag enables showing per-contributor accomplishments on the' +
+    ' contributor dashboard.',
+    platform_parameter_domain.FeatureStages.PROD,
+)
+
+Registry.create_feature_flag(
+    ParamNames.ANDROID_BETA_LANDING_PAGE,
+    'This flag is for Android beta promo landing page.',
+    platform_parameter_domain.FeatureStages.PROD)
+
+Registry.create_feature_flag(
+    ParamNames.BLOG_PAGES,
+    'This flag is for blog home page, blog author profile page and blog post' +
+    ' page.',
+    platform_parameter_domain.FeatureStages.PROD)

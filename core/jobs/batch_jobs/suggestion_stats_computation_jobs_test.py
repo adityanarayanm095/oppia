@@ -29,34 +29,42 @@ from core.platform import models
 
 import apache_beam as beam
 
-from typing import Dict, List, Set, Tuple, Union
+from typing import Dict, Final, List, Set, Tuple, Type, Union
 
 MYPY = False
 if MYPY:
     from mypy_imports import opportunity_models
     from mypy_imports import suggestion_models
 
-(opportunity_models, suggestion_models) = models.Registry.import_models(
-    [models.NAMES.opportunity, models.NAMES.suggestion])
+(opportunity_models, suggestion_models) = models.Registry.import_models([
+    models.Names.OPPORTUNITY, models.Names.SUGGESTION
+])
 
 StatsType = List[Tuple[str, Dict[str, Union[bool, int, str]]]]
 
 
 class GenerateTranslationContributionStatsJobTests(job_test_utils.JobTestBase):
 
-    JOB_CLASS = (
+    JOB_CLASS: Type[
         suggestion_stats_computation_jobs
-        .GenerateTranslationContributionStatsJob)
+        .GenerateTranslationContributionStatsJob
+    ] = (
+        suggestion_stats_computation_jobs
+        .GenerateTranslationContributionStatsJob
+    )
 
-    VALID_USER_ID_1 = 'uid_%s' % ('a' * feconf.USER_ID_RANDOM_PART_LENGTH)
-    VALID_USER_ID_2 = 'uid_%s' % ('b' * feconf.USER_ID_RANDOM_PART_LENGTH)
-    EXP_1_ID = 'exp_1_id'
-    EXP_2_ID = 'exp_2_id'
-    TOPIC_2_ID = 'topic_2_id'
-    TOPIC_1_ID = 'topic_1_id'
-    TOPIC_2_ID = 'topic_2_id'
-    LANG_1 = 'lang_1'
-    LANG_2 = 'lang_2'
+    VALID_USER_ID_1: Final = 'uid_%s' % (
+        'a' * feconf.USER_ID_RANDOM_PART_LENGTH
+    )
+    VALID_USER_ID_2: Final = 'uid_%s' % (
+        'b' * feconf.USER_ID_RANDOM_PART_LENGTH
+    )
+    EXP_1_ID: Final = 'exp_1_id'
+    EXP_2_ID: Final = 'exp_2_id'
+    TOPIC_1_ID: Final = 'topic_1_id'
+    TOPIC_2_ID: Final = 'topic_2_id'
+    LANG_1: Final = 'lang_1'
+    LANG_2: Final = 'lang_2'
 
     def test_empty_storage(self) -> None:
         self.assert_job_output_is_empty()
@@ -111,7 +119,8 @@ class GenerateTranslationContributionStatsJobTests(job_test_utils.JobTestBase):
             suggestion_models.TranslationContributionStatsModel.get(
                 self.LANG_1, self.VALID_USER_ID_1, ''))
 
-        self.assertIsNotNone(translation_stats_model)
+        # Ruling out the possibility of None for mypy type checking.
+        assert translation_stats_model is not None
         self.assertEqual(translation_stats_model.language_code, self.LANG_1)
         self.assertEqual(
             translation_stats_model.contributor_user_id, self.VALID_USER_ID_1)
@@ -131,7 +140,100 @@ class GenerateTranslationContributionStatsJobTests(job_test_utils.JobTestBase):
         self.assertEqual(translation_stats_model.rejected_translations_count, 0)
         self.assertEqual(
             translation_stats_model.rejected_translation_word_count, 0)
-        self.assertItemsEqual( # type: ignore[no-untyped-call]
+        self.assertItemsEqual(
+            translation_stats_model.contribution_dates,
+            [datetime.date.today()]
+        )
+
+    def test_reports_failure_on_broken_model(self) -> None:
+        suggestion_model = self.create_model(
+            suggestion_models.GeneralSuggestionModel,
+            id='suggestion_id',
+            suggestion_type=feconf.SUGGESTION_TYPE_TRANSLATE_CONTENT,
+            author_id=self.VALID_USER_ID_1,
+            change_cmd={
+                'cmd': exp_domain.CMD_ADD_WRITTEN_TRANSLATION,
+                'state_name': 'state',
+                'content_id': 'content_id',
+                'language_code': 'lang',
+                'content_html': 111,
+                'translation_html': '111 222 333',
+                'data_format': 'html'
+            },
+            score_category='irelevant',
+            status=suggestion_models.STATUS_IN_REVIEW,
+            target_type='exploration',
+            target_id=self.EXP_1_ID,
+            target_version_at_submission=0,
+            language_code=self.LANG_1
+        )
+        suggestion_model.update_timestamps()
+        suggestion_model.put()
+
+        self.assert_job_output_is([
+            job_run_result.JobRunResult(
+                stderr=(
+                    'ERROR: "suggestion_id: argument cannot be of \'int\' '
+                    'type, must be of text type": 1'
+                )
+            )
+        ])
+
+    def test_creates_stats_model_from_one_suggestion_in_legacy_format(
+        self
+    ) -> None:
+        suggestion_model = self.create_model(
+            suggestion_models.GeneralSuggestionModel,
+            suggestion_type=feconf.SUGGESTION_TYPE_TRANSLATE_CONTENT,
+            author_id=self.VALID_USER_ID_1,
+            change_cmd={
+                'cmd': exp_domain.DEPRECATED_CMD_ADD_TRANSLATION,
+                'state_name': 'state',
+                'content_id': 'content_id',
+                'language_code': 'lang',
+                'content_html': '111 a',
+                'translation_html': '111 a'
+            },
+            score_category='irelevant',
+            status=suggestion_models.STATUS_IN_REVIEW,
+            target_type='exploration',
+            target_id=self.EXP_1_ID,
+            target_version_at_submission=0,
+            language_code=self.LANG_1
+        )
+        suggestion_model.update_timestamps()
+        suggestion_model.put()
+
+        self.assert_job_output_is([
+            job_run_result.JobRunResult(stdout='SUCCESS: 1')
+        ])
+
+        translation_stats_model = (
+            suggestion_models.TranslationContributionStatsModel.get(
+                self.LANG_1, self.VALID_USER_ID_1, ''))
+
+        # Ruling out the possibility of None for mypy type checking.
+        assert translation_stats_model is not None
+        self.assertEqual(translation_stats_model.language_code, self.LANG_1)
+        self.assertEqual(
+            translation_stats_model.contributor_user_id, self.VALID_USER_ID_1)
+        self.assertEqual(translation_stats_model.topic_id, '')
+        self.assertEqual(
+            translation_stats_model.submitted_translations_count, 1)
+        self.assertEqual(
+            translation_stats_model.submitted_translation_word_count, 2)
+        self.assertEqual(translation_stats_model.accepted_translations_count, 0)
+        self.assertEqual(
+            translation_stats_model
+            .accepted_translations_without_reviewer_edits_count,
+            0
+        )
+        self.assertEqual(
+            translation_stats_model.accepted_translation_word_count, 0)
+        self.assertEqual(translation_stats_model.rejected_translations_count, 0)
+        self.assertEqual(
+            translation_stats_model.rejected_translation_word_count, 0)
+        self.assertItemsEqual(
             translation_stats_model.contribution_dates,
             [datetime.date.today()]
         )
@@ -170,7 +272,8 @@ class GenerateTranslationContributionStatsJobTests(job_test_utils.JobTestBase):
             suggestion_models.TranslationContributionStatsModel.get(
                 self.LANG_1, self.VALID_USER_ID_1, ''))
 
-        self.assertIsNotNone(translation_stats_model)
+        # Ruling out the possibility of None for mypy type checking.
+        assert translation_stats_model is not None
         self.assertEqual(translation_stats_model.language_code, self.LANG_1)
         self.assertEqual(
             translation_stats_model.contributor_user_id, self.VALID_USER_ID_1)
@@ -190,13 +293,13 @@ class GenerateTranslationContributionStatsJobTests(job_test_utils.JobTestBase):
         self.assertEqual(translation_stats_model.rejected_translations_count, 0)
         self.assertEqual(
             translation_stats_model.rejected_translation_word_count, 0)
-        self.assertItemsEqual( # type: ignore[no-untyped-call]
+        self.assertItemsEqual(
             translation_stats_model.contribution_dates,
             [datetime.date.today()]
         )
 
     def test_creates_stats_model_from_one_in_review_suggestion_with_opportunity(
-            self
+        self
     ) -> None:
         suggestion_model = self.create_model(
             suggestion_models.GeneralSuggestionModel,
@@ -241,7 +344,8 @@ class GenerateTranslationContributionStatsJobTests(job_test_utils.JobTestBase):
             suggestion_models.TranslationContributionStatsModel.get(
                 self.LANG_1, self.VALID_USER_ID_1, self.TOPIC_1_ID))
 
-        self.assertIsNotNone(translation_stats_model)
+        # Ruling out the possibility of None for mypy type checking.
+        assert translation_stats_model is not None
         self.assertEqual(translation_stats_model.language_code, self.LANG_1)
         self.assertEqual(
             translation_stats_model.contributor_user_id, self.VALID_USER_ID_1)
@@ -261,7 +365,7 @@ class GenerateTranslationContributionStatsJobTests(job_test_utils.JobTestBase):
         self.assertEqual(translation_stats_model.rejected_translations_count, 0)
         self.assertEqual(
             translation_stats_model.rejected_translation_word_count, 0)
-        self.assertItemsEqual( # type: ignore[no-untyped-call]
+        self.assertItemsEqual(
             translation_stats_model.contribution_dates,
             [datetime.date.today()]
         )
@@ -298,7 +402,8 @@ class GenerateTranslationContributionStatsJobTests(job_test_utils.JobTestBase):
             suggestion_models.TranslationContributionStatsModel.get(
                 self.LANG_1, self.VALID_USER_ID_1, ''))
 
-        self.assertIsNotNone(translation_stats_model)
+        # Ruling out the possibility of None for mypy type checking.
+        assert translation_stats_model is not None
         self.assertEqual(translation_stats_model.language_code, self.LANG_1)
         self.assertEqual(
             translation_stats_model.contributor_user_id, self.VALID_USER_ID_1)
@@ -318,7 +423,7 @@ class GenerateTranslationContributionStatsJobTests(job_test_utils.JobTestBase):
         self.assertEqual(translation_stats_model.rejected_translations_count, 0)
         self.assertEqual(
             translation_stats_model.rejected_translation_word_count, 0)
-        self.assertItemsEqual( # type: ignore[no-untyped-call]
+        self.assertItemsEqual(
             translation_stats_model.contribution_dates,
             [datetime.date.today()]
         )
@@ -378,7 +483,8 @@ class GenerateTranslationContributionStatsJobTests(job_test_utils.JobTestBase):
             suggestion_models.TranslationContributionStatsModel.get(
                 self.LANG_1, self.VALID_USER_ID_1, ''))
 
-        self.assertIsNotNone(translation_stats_model)
+        # Ruling out the possibility of None for mypy type checking.
+        assert translation_stats_model is not None
         self.assertEqual(translation_stats_model.language_code, self.LANG_1)
         self.assertEqual(
             translation_stats_model.contributor_user_id, self.VALID_USER_ID_1)
@@ -398,7 +504,7 @@ class GenerateTranslationContributionStatsJobTests(job_test_utils.JobTestBase):
         self.assertEqual(translation_stats_model.rejected_translations_count, 1)
         self.assertEqual(
             translation_stats_model.rejected_translation_word_count, 5)
-        self.assertItemsEqual( # type: ignore[no-untyped-call]
+        self.assertItemsEqual(
             translation_stats_model.contribution_dates,
             [
                 datetime.date.today(),

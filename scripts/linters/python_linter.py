@@ -21,33 +21,21 @@ from __future__ import annotations
 import io
 import os
 import re
-import sys
 
-from core import python_utils
+import isort.api
+import pycodestyle
+from pylint import lint
+from pylint.reporters import text
+from typing import List, Tuple
 
 from . import linter_utils
-from .. import common
 from .. import concurrent_task_utils
 
-_PATHS_TO_INSERT = [
-    common.PYLINT_PATH,
-    common.PYCODESTYLE_PATH,
-    common.PYLINT_QUOTES_PATH,
-    common.ISORT_PATH,
-]
-for path in _PATHS_TO_INSERT:
-    sys.path.insert(1, path)
 
-from pylint import lint  # isort:skip  pylint: disable=wrong-import-order, wrong-import-position
-from pylint.reporters import text  # isort:skip  pylint: disable=wrong-import-order, wrong-import-position
-import isort.api  # isort:skip  pylint: disable=wrong-import-order, wrong-import-position
-import pycodestyle # isort:skip  pylint: disable=wrong-import-order, wrong-import-position
-
-
-class ThirdPartyPythonLintChecksManager:
+class ThirdPartyPythonLintChecksManager(linter_utils.BaseLinter):
     """Manages all the third party Python linting functions."""
 
-    def __init__(self, files_to_lint):
+    def __init__(self, files_to_lint: List[str]) -> None:
         """Constructs a ThirdPartyPythonLintChecksManager object.
 
         Args:
@@ -56,12 +44,12 @@ class ThirdPartyPythonLintChecksManager:
         self.files_to_lint = files_to_lint
 
     @property
-    def all_filepaths(self):
+    def all_filepaths(self) -> List[str]:
         """Return all filepaths."""
         return self.files_to_lint
 
     @staticmethod
-    def get_trimmed_error_output(lint_message):
+    def get_trimmed_error_output(lint_message: str) -> str:
         """Remove extra bits from pylint error messages.
 
         Args:
@@ -85,7 +73,7 @@ class ThirdPartyPythonLintChecksManager:
 
         return trimmed_lint_message
 
-    def lint_py_files(self):
+    def lint_py_files(self) -> concurrent_task_utils.TaskResult:
         """Prints a list of lint errors in the given list of Python files.
 
         Returns:
@@ -115,7 +103,7 @@ class ThirdPartyPythonLintChecksManager:
             current_files_to_lint = files_to_lint[
                 current_batch_start_index: current_batch_end_index]
 
-            pylint_report = python_utils.string_io()
+            pylint_report = io.StringIO()
             pylinter = lint.Run(
                 current_files_to_lint + [config_pylint],
                 reporter=text.TextReporter(pylint_report),
@@ -150,7 +138,7 @@ class ThirdPartyPythonLintChecksManager:
         return concurrent_task_utils.TaskResult(
             name, errors_found, error_messages, full_error_messages)
 
-    def check_import_order(self):
+    def check_import_order(self) -> concurrent_task_utils.TaskResult:
         """This function is used to check that each file
         has imports placed in alphabetical order.
 
@@ -162,7 +150,7 @@ class ThirdPartyPythonLintChecksManager:
         error_messages = []
         files_to_check = self.all_filepaths
         failed = False
-        stdout = python_utils.string_io()
+        stdout = io.StringIO()
         with linter_utils.redirect_stdout(stdout):
             for filepath in files_to_check:
                 # This line prints the error message along with file path
@@ -177,7 +165,9 @@ class ThirdPartyPythonLintChecksManager:
         return concurrent_task_utils.TaskResult(
             name, failed, error_messages, error_messages)
 
-    def perform_all_lint_checks(self):
+    def perform_all_lint_checks(
+        self
+    ) -> List[concurrent_task_utils.TaskResult]:
         """Perform all the lint checks and returns the messages returned by all
         the checks.
 
@@ -198,7 +188,9 @@ class ThirdPartyPythonLintChecksManager:
         return linter_stdout
 
 
-def get_linters(files_to_lint):
+def get_linters(
+    files_to_lint: List[str]
+) -> Tuple[None, ThirdPartyPythonLintChecksManager]:
     """Creates ThirdPartyPythonLintChecksManager and returns it.
 
     Args:

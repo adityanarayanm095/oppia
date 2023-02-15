@@ -20,12 +20,14 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { fakeAsync, TestBed, tick, waitForAsync } from '@angular/core/testing';
 import { EditableExplorationBackendApiService }
   from 'domain/exploration/editable-exploration-backend-api.service';
+import { ExplorationBackendDict } from 'domain/exploration/ExplorationObjectFactory';
 import { FetchExplorationBackendResponse, ReadOnlyExplorationBackendApiService }
   from 'domain/exploration/read-only-exploration-backend-api.service';
 import { PretestQuestionBackendApiService }
   from 'domain/question/pretest-question-backend-api.service';
 import { QuestionBackendApiService } from 'domain/question/question-backend-api.service';
 import { Question, QuestionBackendDict, QuestionObjectFactory } from 'domain/question/QuestionObjectFactory';
+import { DiagnosticTestTopicTrackerModel } from 'pages/diagnostic-test-player-page/diagnostic-test-topic-tracker.model';
 import { ContextService } from 'services/context.service';
 import { UrlService } from 'services/contextual/url.service';
 import { ExplorationFeatures, ExplorationFeaturesBackendApiService }
@@ -33,6 +35,7 @@ import { ExplorationFeatures, ExplorationFeaturesBackendApiService }
 import { ExplorationFeaturesService } from 'services/exploration-features.service';
 import { PlaythroughService } from 'services/playthrough.service';
 import { ExplorationPlayerConstants } from '../exploration-player-page.constants';
+import { DiagnosticTestPlayerEngineService } from './diagnostic-test-player-engine.service';
 import { ExplorationEngineService } from './exploration-engine.service';
 import { ExplorationPlayerStateService } from './exploration-player-state.service';
 import { NumberAttemptsService } from './number-attempts.service';
@@ -63,9 +66,11 @@ describe('Exploration Player State Service', () => {
   let questionObjectFactory: QuestionObjectFactory;
   let urlService: UrlService;
   let questionObject: Question;
+  let diagnosticTestPlayerEngineService: DiagnosticTestPlayerEngineService;
 
   let returnDict = {
     can_edit: true,
+    draft_change_list_id: 0,
     exploration: {
       init_state_name: 'state_name',
       param_changes: [],
@@ -74,7 +79,24 @@ describe('Exploration Player State Service', () => {
       title: '',
       language_code: '',
       objective: '',
-      correctness_feedback_enabled: false
+      correctness_feedback_enabled: false,
+      next_content_id_index: 0
+    },
+    exploration_metadata: {
+      title: '',
+      category: '',
+      objective: '',
+      language_code: 'en',
+      tags: [],
+      blurb: '',
+      author_notes: '',
+      states_schema_version: 50,
+      init_state_name: 'state_name',
+      param_specs: {},
+      param_changes: [],
+      auto_tts_enabled: false,
+      correctness_feedback_enabled: false,
+      edits_allowed: true
     },
     exploration_id: 'test_id',
     is_logged_in: true,
@@ -84,7 +106,13 @@ describe('Exploration Player State Service', () => {
     preferred_language_codes: [],
     auto_tts_enabled: false,
     correctness_feedback_enabled: true,
-    record_playthrough_probability: 1
+    displayable_language_codes: [],
+    record_playthrough_probability: 1,
+    has_viewed_lesson_info_modal_once: false,
+    furthest_reached_checkpoint_exp_version: 1,
+    furthest_reached_checkpoint_state_name: 'State B',
+    most_recently_reached_checkpoint_state_name: 'State A',
+    most_recently_reached_checkpoint_exp_version: 1
   };
 
   let questionBackendDict: QuestionBackendDict = {
@@ -92,25 +120,16 @@ describe('Exploration Player State Service', () => {
     question_state_data: {
       classifier_model_id: null,
       param_changes: [],
-      next_content_id_index: 1,
       solicit_answer_details: false,
       content: {
         content_id: '1',
         html: 'Question 1'
       },
-      written_translations: {
-        translations_mapping: {
-          1: {},
-          ca_placeholder_0: {},
-          feedback_id: {},
-          solution: {},
-          hint_1: {}
-        }
-      },
       interaction: {
         answer_groups: [{
           outcome: {
             dest: 'State 1',
+            dest_if_really_stuck: null,
             feedback: {
               content_id: 'feedback_1',
               html: '<p>Try Again.</p>'
@@ -124,12 +143,13 @@ describe('Exploration Player State Service', () => {
             rule_type: 'Equals',
             inputs: {x: 0}
           }],
-          training_data: null,
+          training_data: [],
           tagged_skill_misconception_id: null,
         },
         {
           outcome: {
             dest: 'State 2',
+            dest_if_really_stuck: null,
             feedback: {
               content_id: 'feedback_2',
               html: '<p>Try Again.</p>'
@@ -143,11 +163,12 @@ describe('Exploration Player State Service', () => {
             rule_type: 'Equals',
             inputs: {x: 0}
           }],
-          training_data: null,
+          training_data: [],
           tagged_skill_misconception_id: 'misconceptionId',
         }],
         default_outcome: {
-          dest: null,
+          dest: 'dest',
+          dest_if_really_stuck: null,
           labelled_as_correct: true,
           missing_prerequisite_skill_id: null,
           refresher_exploration_id: null,
@@ -167,6 +188,9 @@ describe('Exploration Player State Service', () => {
               unicode_str: '',
               content_id: 'ca_placeholder_0'
             }
+          },
+          catchMisspellings: {
+            value: false
           }
         },
         confirmed_unclassified_answers: [],
@@ -201,6 +225,7 @@ describe('Exploration Player State Service', () => {
     },
     question_state_data_schema_version: 2,
     language_code: '',
+    next_content_id_index: 4,
     version: 1,
     linked_skill_ids: [],
     inapplicable_skill_misconception_ids: []
@@ -307,6 +332,8 @@ describe('Exploration Player State Service', () => {
       questionBackendDict);
     urlService = (TestBed.inject(UrlService) as unknown) as
       jasmine.SpyObj<UrlService>;
+    diagnosticTestPlayerEngineService = TestBed.inject(
+      DiagnosticTestPlayerEngineService);
   });
 
   it('should properly initialize player', () => {
@@ -344,7 +371,7 @@ describe('Exploration Player State Service', () => {
   it('should initialize pretest services', () => {
     spyOn(playerCorrectnessFeedbackEnabledService, 'init');
     spyOn(questionPlayerEngineService, 'init');
-    let pretestQuestionObjects = [];
+    let pretestQuestionObjects: Question[] = [];
     let callback = () => {};
 
     explorationPlayerStateService.initializePretestServices(
@@ -369,6 +396,16 @@ describe('Exploration Player State Service', () => {
       .toHaveBeenCalledWith(true);
     expect(questionPlayerEngineService.init).toHaveBeenCalledWith(
       questionObjects, successCallback, errorCallback);
+  });
+
+  it('should be able to skip the current question', () => {
+    spyOn(diagnosticTestPlayerEngineService, 'skipCurrentQuestion');
+    let successCallback = () => {};
+
+    explorationPlayerStateService.skipCurrentQuestion(successCallback);
+
+    expect(diagnosticTestPlayerEngineService.skipCurrentQuestion)
+      .toHaveBeenCalledOnceWith(successCallback);
   });
 
   it('should set exploration mode', () => {
@@ -412,16 +449,35 @@ describe('Exploration Player State Service', () => {
     spyOn(
       editableExplorationBackendApiService, 'fetchApplyDraftExplorationAsync')
       .and.returnValue(Promise.resolve({
+        auto_tts_enabled: false,
         correctness_feedback_enabled: false,
         draft_changes: [],
         is_version_of_draft_valid: true,
         init_state_name: '',
         param_changes: [],
-        param_specs: null,
-        states: null,
+        param_specs: {},
+        states: {},
         title: '',
-        language_code: ''
-      }));
+        draft_change_list_id: 0,
+        language_code: '',
+        next_content_id_index: 0,
+        exploration_metadata: {
+          title: 'Exploration',
+          category: 'Algebra',
+          objective: 'To learn',
+          language_code: 'en',
+          tags: [],
+          blurb: '',
+          author_notes: '',
+          states_schema_version: 50,
+          init_state_name: 'Introduction',
+          param_specs: {},
+          param_changes: [],
+          auto_tts_enabled: false,
+          correctness_feedback_enabled: true,
+          edits_allowed: true
+        }
+      } as ExplorationBackendDict));
     spyOn(explorationFeaturesBackendApiService, 'fetchExplorationFeaturesAsync')
       .and.returnValue(Promise.resolve({
         isExplorationWhitelisted: true,
@@ -550,6 +606,24 @@ describe('Exploration Player State Service', () => {
     }, successCallback, errorCallback);
   });
 
+  it('should intialize diagnostic test player', () => {
+    spyOn(diagnosticTestPlayerEngineService, 'init');
+    let successCallback = () => {};
+    let topicIdToPrerequisiteTopicIds = {
+      topicId1: [],
+      topicId2: ['topicId1'],
+      topicId3: ['topicId2']
+    };
+
+    let diagnosticTestTopicTrackerModel = new DiagnosticTestTopicTrackerModel(
+      topicIdToPrerequisiteTopicIds);
+
+    explorationPlayerStateService.initializeDiagnosticPlayer(
+      diagnosticTestTopicTrackerModel, successCallback);
+
+    expect(diagnosticTestPlayerEngineService.init).toHaveBeenCalled();
+  });
+
   it('should get current engine service', () => {
     explorationPlayerStateService.setExplorationMode();
     expect(explorationPlayerStateService.getCurrentEngineService())
@@ -565,6 +639,30 @@ describe('Exploration Player State Service', () => {
     explorationPlayerStateService.setQuestionPlayerMode();
     expect(explorationPlayerStateService.isInQuestionMode()).toBeTrue();
   });
+
+  it('should tell if is in diagnostic test player mode', () => {
+    explorationPlayerStateService.setDiagnosticTestPlayerMode();
+    expect(explorationPlayerStateService.isInDiagnosticTestPlayerMode())
+      .toBeTrue();
+  });
+
+  it(
+    'should tell if the mode can only present isolated questions or not',
+    fakeAsync(() => {
+      explorationPlayerStateService.setDiagnosticTestPlayerMode();
+      expect(explorationPlayerStateService.isPresentingIsolatedQuestions())
+        .toBeTrue();
+
+      explorationPlayerStateService.setExplorationMode();
+      expect(explorationPlayerStateService.isPresentingIsolatedQuestions())
+        .toBeFalse();
+
+      explorationPlayerStateService.explorationMode = 'invalidMode';
+      expect(() => {
+        explorationPlayerStateService.isPresentingIsolatedQuestions();
+        tick(10);
+      }).toThrowError('Invalid mode received: invalidMode.');
+    }));
 
   it('should tell if is in question player mode', () => {
     explorationPlayerStateService.setQuestionPlayerMode();
@@ -648,4 +746,27 @@ describe('Exploration Player State Service', () => {
     explorationPlayerStateService.init();
     expect(explorationPlayerStateService.version).toBe(1);
   });
+
+  it('should tell if logged out learner progress is tracked', () => {
+    expect(explorationPlayerStateService.isLoggedOutLearnerProgressTracked())
+      .toBeFalse();
+    explorationPlayerStateService.trackLoggedOutLearnerProgress();
+    expect(explorationPlayerStateService.isLoggedOutLearnerProgressTracked())
+      .toBeTrue();
+  });
+
+  it('should set unique progress URL id correctly', fakeAsync(() => {
+    spyOn(
+      editableExplorationBackendApiService,
+      'recordProgressAndFetchUniqueProgressIdOfLoggedOutLearner')
+      .and.returnValue(Promise.resolve({
+        unique_progress_url_id: '123456'
+      }));
+    expect(explorationPlayerStateService.getUniqueProgressUrlId()).toBeNull();
+    explorationPlayerStateService.setLastCompletedCheckpoint('abc');
+    explorationPlayerStateService.setUniqueProgressUrlId();
+    tick(100);
+    expect(explorationPlayerStateService.getUniqueProgressUrlId()).toEqual(
+      '123456');
+  }));
 });

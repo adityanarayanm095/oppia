@@ -58,6 +58,7 @@ describe('AlgebraicExpressionInputValidationService', () => {
     currentState = 'First State';
     goodDefaultOutcome = oof.createFromBackendDict({
       dest: 'Second State',
+      dest_if_really_stuck: null,
       feedback: {
         html: '',
         content_id: ''
@@ -70,7 +71,7 @@ describe('AlgebraicExpressionInputValidationService', () => {
 
     customizationArgs = {
       useFractionForDivision: false,
-      customOskLetters: {
+      allowedVariables: {
         value: ['x', 'y', 'a', 'b']
       }
     };
@@ -85,7 +86,7 @@ describe('AlgebraicExpressionInputValidationService', () => {
     matchesExactlyWith = rof.createFromBackendDict({
       rule_type: 'MatchesExactlyWith',
       inputs: {
-        x: 'x * x'
+        x: 'x^2'
       }
     }, 'AlgebraicExpressionInput');
 
@@ -145,7 +146,7 @@ describe('AlgebraicExpressionInputValidationService', () => {
     let matchesExactlyWith2 = rof.createFromBackendDict({
       rule_type: 'MatchesExactlyWith',
       inputs: {
-        x: '-1 + x*x'
+        x: 'x^2 - 1'
       }
     }, 'AlgebraicExpressionInput');
 
@@ -199,7 +200,7 @@ describe('AlgebraicExpressionInputValidationService', () => {
     ];
     customizationArgs = {
       useFractionForDivision: false,
-      customOskLetters: {
+      allowedVariables: {
         value: ['y', 'a', 'b']
       }
     };
@@ -225,7 +226,7 @@ describe('AlgebraicExpressionInputValidationService', () => {
     ];
     customizationArgs = {
       useFractionForDivision: false,
-      customOskLetters: {
+      allowedVariables: {
         value: ['y', 'x', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']
       }
     };
@@ -235,6 +236,33 @@ describe('AlgebraicExpressionInputValidationService', () => {
     expect(warnings).toEqual([{
       type: AppConstants.WARNING_TYPES.ERROR,
       message: 'The number of custom letters cannot be more than 10.'
+    }]);
+  });
+
+  it('should warn if there are inputs with unsupported functions', function() {
+    answerGroups[0].rules = [
+      rof.createFromBackendDict({
+        rule_type: 'IsEquivalentTo',
+        inputs: {
+          x: 'x+log(y)'
+        }
+      }, 'AlgebraicExpressionInput')
+    ];
+    customizationArgs = {
+      useFractionForDivision: false,
+      allowedVariables: {
+        value: ['y', 'x']
+      }
+    };
+
+    warnings = validatorService.getAllWarnings(
+      currentState, customizationArgs, answerGroups, goodDefaultOutcome);
+
+    expect(warnings).toEqual([{
+      type: AppConstants.WARNING_TYPES.ERROR,
+      message: (
+        'Input for rule 1 from answer group 1 uses these function(s) that ' +
+        'aren\'t supported: [log] The supported functions are: [sqrt,abs]')
     }]);
   });
 });

@@ -118,6 +118,7 @@ describe('Question object factory', function() {
           answer_groups: [{
             outcome: {
               dest: 'outcome 1',
+              dest_if_really_stuck: null,
               feedback: {
                 content_id: 'content_5',
                 html: ''
@@ -139,10 +140,14 @@ describe('Question object factory', function() {
                 unicode_str: ''
               }
             },
-            rows: { value: 1 }
+            rows: { value: 1 },
+            catchMisspellings: {
+              value: false
+            }
           },
           default_outcome: {
             dest: null,
+            dest_if_really_stuck: null,
             feedback: {
               html: 'Correct Answer',
               content_id: 'content_2'
@@ -290,7 +295,8 @@ describe('Question object factory', function() {
   it('should correctly create a Default Question', function() {
     var sampleQuestion1 = QuestionObjectFactory.createDefaultQuestion(
       ['skill_id3', 'skill_id4']);
-    var state = StateObjectFactory.createDefaultState(null);
+    var state = StateObjectFactory.createDefaultState(
+      null, 'content_0', 'default_outcome_1');
 
     expect(sampleQuestion1.getId()).toEqual(null);
     expect(sampleQuestion1.getLanguageCode()).toEqual('en');

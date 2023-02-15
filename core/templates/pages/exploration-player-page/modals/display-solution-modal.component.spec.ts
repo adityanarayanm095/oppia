@@ -16,7 +16,6 @@
  * @fileoverview Unit tests for DisplaySolutionModalComponent.
  */
 
-import { Component, Directive } from '@angular/core';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed, waitForAsync } from '@angular/core/testing';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
@@ -31,18 +30,9 @@ import { PlayerTranscriptService } from '../services/player-transcript.service';
 import { DisplaySolutionModalComponent } from './display-solution-modal.component';
 import { MockTranslatePipe } from 'tests/unit-test-utils';
 import { Interaction } from 'domain/exploration/InteractionObjectFactory';
-import { WrittenTranslations } from 'domain/exploration/WrittenTranslationsObjectFactory';
 import { AudioTranslationLanguageService } from '../services/audio-translation-language.service';
-
-let MockAngularHtmlBindWrapperDirective = function(
-    options: Component): Directive {
-  const metadata: Directive = {
-    selector: options.selector,
-    inputs: options.inputs,
-    outputs: options.outputs
-  };
-  return Directive(metadata)(class _ { }) as Directive;
-};
+import { InteractionDisplayComponent } from 'components/interaction-display/interaction-display.component';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 
 describe('Display Solution Modal', () => {
   let fixture: ComponentFixture<DisplaySolutionModalComponent>;
@@ -79,9 +69,7 @@ describe('Display Solution Modal', () => {
       declarations: [
         DisplaySolutionModalComponent,
         MockTranslatePipe,
-        MockAngularHtmlBindWrapperDirective({
-          selector: 'angular-html-bind-wrapper',
-          inputs: ['htmlData'] })
+        InteractionDisplayComponent
       ],
       providers: [
         NgbActiveModal,
@@ -94,7 +82,8 @@ describe('Display Solution Modal', () => {
         },
         PlayerPositionService,
         PlayerTranscriptService
-      ]
+      ],
+      schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
   }));
 
@@ -123,12 +112,11 @@ describe('Display Solution Modal', () => {
   it('should intialize', () => {
     let contentId: string = 'content_id';
     let interaction = {} as Interaction;
-    let writtenTranslations = {} as WrittenTranslations;
     let recordedVoiceovers = new RecordedVoiceovers({});
     let audioTranslation = {} as AudioTranslationLanguageService;
     let displayedCard = new StateCard(
       'test_name', 'content', 'interaction', interaction, [],
-      recordedVoiceovers, writtenTranslations, contentId, audioTranslation);
+      recordedVoiceovers, contentId, audioTranslation);
     spyOn(playerTranscriptService, 'getCard').and.returnValue(displayedCard);
     spyOn(audioTranslationManagerService, 'setSecondaryAudioTranslations');
     spyOn(audioPlayerService.onAutoplayAudio, 'emit');

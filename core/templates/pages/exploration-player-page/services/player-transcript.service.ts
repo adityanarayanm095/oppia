@@ -65,6 +65,7 @@ export class PlayerTranscriptService {
       return transcriptItem.getStateName() === stateName;
     });
   }
+
   addNewCard(newCard: StateCard): void {
     this.transcript.push(newCard);
     this.numAnswersSubmitted = 0;
@@ -106,6 +107,11 @@ export class PlayerTranscriptService {
   addNewResponse(response: string): void {
     let card = this.getLastCard();
     card.setLastOppiaResponse(response);
+  }
+
+  addNewResponseToExistingFeedback(response: string): void {
+    let card = this.getLastCard();
+    card.addToExistingFeedback(response);
   }
 
   getNumCards(): number {

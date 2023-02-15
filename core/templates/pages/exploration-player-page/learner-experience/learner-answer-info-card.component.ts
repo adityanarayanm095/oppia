@@ -37,8 +37,12 @@ interface SubmitAnswerEventDataInterface {
 export class LearnerAnswerInfoCard {
   @Output() submitAnswer: EventEmitter<SubmitAnswerEventDataInterface> = (
     new EventEmitter());
-  interaction: Interaction;
-  answerDetails: string;
+
+  // These properties are initialized using Angular lifecycle hooks
+  // and we need to do non-null assertion. For more information, see
+  // https://github.com/oppia/oppia/wiki/Guide-on-defining-types#ts-7-1
+  interaction!: Interaction;
+  answerDetails!: string;
 
   constructor(
     private explorationEngineService: ExplorationEngineService,

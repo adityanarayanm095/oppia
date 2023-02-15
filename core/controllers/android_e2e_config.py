@@ -19,13 +19,12 @@ from __future__ import annotations
 import os
 
 from core import feconf
-from core import python_utils
+from core import utils
 from core.constants import constants
 from core.controllers import acl_decorators
 from core.controllers import base
 from core.domain import exp_domain
 from core.domain import exp_services
-from core.domain import fs_domain
 from core.domain import fs_services
 from core.domain import opportunity_services
 from core.domain import question_domain
@@ -41,17 +40,22 @@ from core.domain import subtopic_page_services
 from core.domain import topic_domain
 from core.domain import topic_fetchers
 from core.domain import topic_services
+from core.domain import translation_domain
 from core.domain import user_services
 
+from typing import Dict, List
 
-class InitializeAndroidTestDataHandler(base.BaseHandler):
+
+class InitializeAndroidTestDataHandler(
+    base.BaseHandler[Dict[str, str], Dict[str, str]]
+):
     """Handler to initialize android specific structures."""
 
-    URL_PATH_ARGS_SCHEMAS = {}
-    HANDLER_ARGS_SCHEMAS = {'POST': {}}
+    URL_PATH_ARGS_SCHEMAS: Dict[str, str] = {}
+    HANDLER_ARGS_SCHEMAS: Dict[str, Dict[str, str]] = {'POST': {}}
 
     @acl_decorators.open_access
-    def post(self):
+    def post(self) -> None:
         """Generates structures for Android end-to-end tests.
 
         This handler generates structures for Android end-to-end tests in
@@ -80,17 +84,19 @@ class InitializeAndroidTestDataHandler(base.BaseHandler):
 
         if not constants.DEV_MODE:
             raise Exception('Cannot load new structures data in production.')
-        if topic_services.does_topic_with_name_exist(
-                'Android test'):
-            topic = topic_fetchers.get_topic_by_name('Android test')
+        if topic_services.does_topic_with_name_exist('Android test'):
+            topic = topic_fetchers.get_topic_by_name(
+                'Android test', strict=True
+            )
             topic_rights = topic_fetchers.get_topic_rights(
-                topic.id, strict=False)
+                topic.id, strict=True
+            )
             if topic_rights.topic_is_published:
                 raise self.InvalidInputException(
                     'The topic is already published.')
-            else:
-                raise self.InvalidInputException(
-                    'The topic exists but is not published.')
+
+            raise self.InvalidInputException(
+                'The topic exists but is not published.')
         exp_id = '26'
         user_id = feconf.SYSTEM_COMMITTER_ID
         # Generate new Structure id for topic, story, skill and question.
@@ -110,35 +116,36 @@ class InitializeAndroidTestDataHandler(base.BaseHandler):
 
         # Create and update topic to validate before publishing.
         topic = topic_domain.Topic.create_default_topic(
-            topic_id, 'Android test', 'test-topic-one', 'description')
+            topic_id, 'Android test', 'test-topic-one', 'description',
+            'fragm')
         topic.update_url_fragment('test-topic')
         topic.update_meta_tag_content('tag')
         topic.update_page_title_fragment_for_web('page title for topic')
         # Save the dummy image to the filesystem to be used as thumbnail.
-        with python_utils.open_file(
+        with utils.open_file(
             os.path.join(feconf.TESTS_DATA_DIR, 'test_svg.svg'),
             'rb', encoding=None) as f:
             raw_image = f.read()
-        fs = fs_domain.AbstractFileSystem(
-            fs_domain.GcsFileSystem(
-                feconf.ENTITY_TYPE_TOPIC, topic_id))
+        fs = fs_services.GcsFileSystem(feconf.ENTITY_TYPE_TOPIC, topic_id)
         fs.commit(
             '%s/test_svg.svg' % (constants.ASSET_TYPE_THUMBNAIL), raw_image,
             mimetype='image/svg+xml')
         # Update thumbnail properties.
-        topic.update_thumbnail_filename('test_svg.svg')
+        topic_services.update_thumbnail_filename(topic, 'test_svg.svg')
         topic.update_thumbnail_bg_color('#C6DCDA')
 
         # Add other structures to the topic.
         topic.add_canonical_story(story_id)
         topic.add_uncategorized_skill_id(skill_id)
-        topic.add_subtopic(1, 'Test Subtopic Title')
+        topic.add_subtopic(1, 'Test Subtopic Title', 'testsubtop')
 
         # Update and validate subtopic.
-        topic.update_subtopic_thumbnail_filename(1, 'test_svg.svg')
+        topic_services.update_subtopic_thumbnail_filename(
+            topic, 1, 'test_svg.svg')
         topic.update_subtopic_thumbnail_bg_color(1, '#FFFFFF')
         topic.update_subtopic_url_fragment(1, 'suburl')
         topic.move_skill_id_to_subtopic(None, 1, skill_id)
+        topic.update_skill_ids_for_diagnostic_test([skill_id])
         subtopic_page = (
             subtopic_page_domain.SubtopicPage.create_default_subtopic_page(
                 1, topic_id))
@@ -174,13 +181,11 @@ class InitializeAndroidTestDataHandler(base.BaseHandler):
         )
 
         # Save the dummy image to the filesystem to be used as thumbnail.
-        with python_utils.open_file(
+        with utils.open_file(
             os.path.join(feconf.TESTS_DATA_DIR, 'test_svg.svg'),
             'rb', encoding=None) as f:
             raw_image = f.read()
-        fs = fs_domain.AbstractFileSystem(
-            fs_domain.GcsFileSystem(
-                feconf.ENTITY_TYPE_STORY, story_id))
+        fs = fs_services.GcsFileSystem(feconf.ENTITY_TYPE_STORY, story_id)
         fs.commit(
             '%s/test_svg.svg' % (constants.ASSET_TYPE_THUMBNAIL), raw_image,
             mimetype='image/svg+xml')
@@ -207,7 +212,8 @@ class InitializeAndroidTestDataHandler(base.BaseHandler):
             [topic_domain.TopicChange({
                 'cmd': topic_domain.CMD_ADD_SUBTOPIC,
                 'subtopic_id': 1,
-                'title': 'Dummy Subtopic Title'
+                'title': 'Dummy Subtopic Title',
+                'url_fragment': 'dummy-fragment'
             })]
         )
 
@@ -225,12 +231,11 @@ class InitializeAndroidTestDataHandler(base.BaseHandler):
         self._upload_thumbnail(story_id, feconf.ENTITY_TYPE_STORY)
         self.render_json({})
 
-    def _upload_thumbnail(self, structure_id, structure_type):
+    def _upload_thumbnail(self, structure_id: str, structure_type: str) -> None:
         """Uploads images to the local datastore to be fetched using the
         AssetDevHandler.
         """
-
-        with python_utils.open_file(
+        with utils.open_file(
             os.path.join(feconf.TESTS_DATA_DIR, 'test_svg.svg'), 'rb',
             encoding=None) as f:
             image_content = f.read()
@@ -239,7 +244,11 @@ class InitializeAndroidTestDataHandler(base.BaseHandler):
                 image_content, 'thumbnail', False)
 
     def _create_dummy_question(
-            self, question_id, question_content, linked_skill_ids):
+        self,
+        question_id: str,
+        question_content: str,
+        linked_skill_ids: List[str]
+    ) -> question_domain.Question:
         """Creates a dummy question object with the given question ID.
 
         Args:
@@ -251,39 +260,44 @@ class InitializeAndroidTestDataHandler(base.BaseHandler):
         Returns:
             Question. The dummy question with given values.
         """
+        content_id_generator = translation_domain.ContentIdGenerator()
         state = state_domain.State.create_default_state(
-            'ABC', is_initial_state=True)
+            'ABC',
+            content_id_generator.generate(
+                translation_domain.ContentType.CONTENT),
+            content_id_generator.generate(
+                translation_domain.ContentType.DEFAULT_OUTCOME),
+            is_initial_state=True)
         state.update_interaction_id('TextInput')
         state.update_interaction_customization_args({
             'placeholder': {
                 'value': {
-                    'content_id': 'ca_placeholder_0',
+                    'content_id': content_id_generator.generate(
+                        translation_domain.ContentType.CUSTOMIZATION_ARG),
                     'unicode_str': ''
                 }
             },
-            'rows': {'value': 1}
+            'rows': {'value': 1},
+            'catchMisspellings': {
+                'value': False
+            }
         })
 
-        state.update_next_content_id_index(1)
         state.update_linked_skill_id(None)
-        state.update_content(state_domain.SubtitledHtml('1', question_content))
-        recorded_voiceovers = state_domain.RecordedVoiceovers({})
-        written_translations = state_domain.WrittenTranslations({})
-        recorded_voiceovers.add_content_id_for_voiceover('ca_placeholder_0')
-        recorded_voiceovers.add_content_id_for_voiceover('1')
-        recorded_voiceovers.add_content_id_for_voiceover('default_outcome')
-        written_translations.add_content_id_for_translation('ca_placeholder_0')
-        written_translations.add_content_id_for_translation('1')
-        written_translations.add_content_id_for_translation('default_outcome')
+        state.update_content(state_domain.SubtitledHtml(
+            state.content.content_id, question_content))
 
-        state.update_recorded_voiceovers(recorded_voiceovers)
-        state.update_written_translations(written_translations)
         solution = state_domain.Solution(
             'TextInput', False, 'Solution', state_domain.SubtitledHtml(
-                'solution', '<p>This is a solution.</p>'))
+                content_id_generator.generate(
+                    translation_domain.ContentType.SOLUTION),
+                '<p>This is a solution.</p>'))
         hints_list = [
             state_domain.Hint(
-                state_domain.SubtitledHtml('hint_1', '<p>This is a hint.</p>')
+                state_domain.SubtitledHtml(
+                    content_id_generator.generate(
+                        translation_domain.ContentType.HINT),
+                    '<p>This is a hint.</p>')
             )
         ]
 
@@ -291,18 +305,23 @@ class InitializeAndroidTestDataHandler(base.BaseHandler):
         state.update_interaction_hints(hints_list)
         state.update_interaction_default_outcome(
             state_domain.Outcome(
-                None, state_domain.SubtitledHtml(
-                    'feedback_id', '<p>Dummy Feedback</p>'),
+                None, None, state_domain.SubtitledHtml(
+                    content_id_generator.generate(
+                        translation_domain.ContentType.DEFAULT_OUTCOME),
+                    '<p>Dummy Feedback</p>'),
                 True, [], None, None
             )
         )
         question = question_domain.Question(
             question_id, state,
             feconf.CURRENT_STATE_SCHEMA_VERSION,
-            constants.DEFAULT_LANGUAGE_CODE, 0, linked_skill_ids, [])
+            constants.DEFAULT_LANGUAGE_CODE, 0, linked_skill_ids, [],
+            content_id_generator.next_content_id_index)
         return question
 
-    def _create_dummy_skill(self, skill_id, skill_description, explanation):
+    def _create_dummy_skill(
+        self, skill_id: str, skill_description: str, explanation: str
+    ) -> skill_domain.Skill:
         """Creates a dummy skill object with the given values.
 
         Args:

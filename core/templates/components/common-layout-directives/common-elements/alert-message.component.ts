@@ -20,7 +20,6 @@ import { Component, Input } from '@angular/core';
 import { downgradeComponent } from '@angular/upgrade/static';
 import { ToastrService } from 'ngx-toastr';
 import { AlertsService } from 'services/alerts.service';
-require('ngx-toastr/toastr.css');
 
 export interface MessageObject {
   type: string;
@@ -34,7 +33,7 @@ export interface MessageObject {
 })
 export class AlertMessageComponent {
   // These properties are initialized using Angular lifecycle hooks
-  // and we need to do non-null assertion, for more information see
+  // and we need to do non-null assertion. For more information, see
   // https://github.com/oppia/oppia/wiki/Guide-on-defining-types#ts-7-1
   @Input() messageObject!: MessageObject;
   @Input() messageIndex!: number;
